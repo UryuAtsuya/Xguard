@@ -25,9 +25,41 @@ The v0 goal is not to restore banned accounts. The product stores user-authorize
 
 - `docs/X_API_SCOPE.md`: current X API data and policy scope.
 - `docs/IMPLEMENTATION_GATE.md`: checklist before writing product code.
+- `docs/API_SPEC.md`: current backend prototype routes and replacement interfaces.
+
+## Prototype Code
+
+The first code spike is backend-first:
+
+```text
+backend/       Express API prototype, mock X client, token repository boundary
+shared/        TypeScript DTOs shared by frontend/backend later
+supabase/      Initial schema for auth profiles, X backups, proof pages, compliance, Stripe events
+```
+
+Run locally:
+
+```bash
+npm install
+npm run dev:api
+```
+
+Verify:
+
+```bash
+npm run check
+```
 
 ## Source of Truth
 
 Planning and company notes are maintained in:
 
 `/Users/uryuatsuya/Documents/ObsidianVault/MyLife/company/projects/x-ban-recovery-storage`
+
+## GitHub Sync Rule
+
+Meaningful coding work should be committed and pushed to `UryuAtsuya/Xguard` after verification. If `origin` is missing, set it to:
+
+```bash
+git remote add origin https://github.com/UryuAtsuya/Xguard.git
+```
