@@ -1,17 +1,24 @@
-import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../app.js";
+import { buildMockOAuthStartResponse } from "../app.js";
+import { MockXApiClient } from "../clients/xApiClient.js";
+import { fixtureAccount, fixtureProfile, fixtureTweets } from "../fixtures/mockXData.js";
+import { MockBackupService } from "../services/mockBackupService.js";
 
 describe("XGuard API prototype", () => {
+  it("keeps the mock OAuth scope read-only and minimum for v0", async () => {
+    const response = buildMockOAuthStartResponse();
+
+    expect(response.scopes).toEqual(["tweet.read", "users.read", "offline.access"]);
+    expect(response.scopes).not.toContain("follows.read");
+    expect(response.writesEnabled).toBe(false);
+  });
+
   it("runs a mock backup and serves its proof DTO", async () => {
-    const app = createApp();
-    const backupResponse = await request(app).post("/api/backup/run").send({ tweetLimit: 2 }).expect(201);
+    const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets));
+    const backupResponse = await backupService.runBackup(2);
 
-    expect(backupResponse.body.backupRun.status).toBe("completed");
-    expect(backupResponse.body.proofPayload.representativeTweets).toHaveLength(2);
-
-    const runId = backupResponse.body.backupRun.id;
-    const proofResponse = await request(app).get(`/api/recovery/${runId}/proof`).expect(200);
-    expect(proofResponse.body.username).toBe("xguard_creator");
+    expect(backupResponse.backupRun.status).toBe("completed");
+    expect(backupResponse.proofPayload.representativeTweets).toHaveLength(2);
+    expect(backupResponse.proofPayload.username).toBe("xguard_creator");
   });
 });

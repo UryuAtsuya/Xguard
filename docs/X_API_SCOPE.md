@@ -12,8 +12,9 @@ It connects to the user's own X account, backs up profile and recent post data w
 
 - `tweet.read`
 - `users.read`
-- `follows.read`
 - `offline.access`
+
+`follows.read` is P1 only. Do not request it in v0 until follower/following retention, privacy, and cost handling are confirmed.
 
 ## Avoid in v0
 

@@ -20,7 +20,7 @@ The current prototype is a read-only API spike. It models OAuth intake, token re
 ## Backend Interfaces To Replace
 
 - `TokenRepository`: replace in-memory token refs with Supabase service-role storage and Vault/encryption handling.
-- `XApiClient`: replace fixture data with X API calls limited to `tweet.read`, `users.read`, `follows.read`, and `offline.access`.
+- `XApiClient`: replace fixture data with X API calls limited to `tweet.read`, `users.read`, and `offline.access` for v0. Add `follows.read` only after follower/following retention, privacy, and cost handling are approved.
 - `MockBackupService`: replace with a transactional backup runner that writes snapshots, usage events, and rate-limit metadata.
 
 ## Deliberately Excluded
