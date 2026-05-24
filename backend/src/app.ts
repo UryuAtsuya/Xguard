@@ -6,12 +6,24 @@ import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXD
 import { InMemoryTokenRepository } from "./repositories/tokenRepository.js";
 import { MockBackupService } from "./services/mockBackupService.js";
 
-const backupRuns = new Map<string, Awaited<ReturnType<MockBackupService["runBackup"]>>>();
+export const V0_READ_ONLY_OAUTH_SCOPES = ["tweet.read", "users.read", "offline.access"] as const;
+
+export function buildMockOAuthStartResponse() {
+  const scopeParam = V0_READ_ONLY_OAUTH_SCOPES.join("%20");
+
+  return {
+    authorizationUrl: `https://x.com/i/oauth2/authorize?client_id=mock&scope=${scopeParam}`,
+    scopes: [...V0_READ_ONLY_OAUTH_SCOPES],
+    state: "mock-state",
+    writesEnabled: false,
+  };
+}
 
 export function createApp() {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets));
+  const backupRuns = new Map<string, Awaited<ReturnType<MockBackupService["runBackup"]>>>();
 
   app.use(cors());
   app.use(express.json());
@@ -26,12 +38,7 @@ export function createApp() {
   });
 
   app.get("/api/x/oauth/start", (_request, response) => {
-    response.json({
-      authorizationUrl: "https://x.com/i/oauth2/authorize?client_id=mock&scope=tweet.read%20users.read%20follows.read%20offline.access",
-      scopes: ["tweet.read", "users.read", "follows.read", "offline.access"],
-      state: "mock-state",
-      writesEnabled: false,
-    });
+    response.json(buildMockOAuthStartResponse());
   });
 
   app.get("/api/x/oauth/callback", async (request, response) => {
@@ -45,7 +52,7 @@ export function createApp() {
     await tokenRepository.saveXToken({
       xAccountId: fixtureAccount.id,
       provider: "x",
-      scope: ["tweet.read", "users.read", "follows.read", "offline.access"],
+      scope: [...V0_READ_ONLY_OAUTH_SCOPES],
       accessTokenRef: "vault://x/oauth/access/mock",
       refreshTokenRef: "vault://x/oauth/refresh/mock",
     });
