@@ -26,6 +26,9 @@ The v0 goal is not to restore banned accounts. The product stores user-authorize
 - `docs/X_API_SCOPE.md`: current X API data and policy scope.
 - `docs/IMPLEMENTATION_GATE.md`: checklist before writing product code.
 - `docs/API_SPEC.md`: current backend prototype routes and replacement interfaces.
+- `docs/ARCHITECTURE.md`: current backend-first architecture and safety boundaries.
+- `docs/API_COST_MODEL.md`: API usage event and cost tracking contract.
+- `docs/COMPLIANCE.md`: proof-page, deletion, and manual-review compliance contract.
 
 ## Prototype Code
 

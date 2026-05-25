@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev:api": "tsx watch backend/src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --configLoader runner",
     "check": "npm run build && npm run test"
   },
   "dependencies": {
