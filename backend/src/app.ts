@@ -3,10 +3,11 @@ import express from "express";
 import { z } from "zod";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
-import { InMemoryTokenRepository } from "./repositories/tokenRepository.js";
+import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
+import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
 import { MockBackupService } from "./services/mockBackupService.js";
 
-export const V0_READ_ONLY_OAUTH_SCOPES = ["tweet.read", "users.read", "offline.access"] as const;
+export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
 export function buildMockOAuthStartResponse() {
   const scopeParam = V0_READ_ONLY_OAUTH_SCOPES.join("%20");
@@ -22,7 +23,8 @@ export function buildMockOAuthStartResponse() {
 export function createApp() {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
-  const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets));
+  const usageLedger = createInMemoryApiUsageLedgerService();
+  const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, Awaited<ReturnType<MockBackupService["runBackup"]>>>();
 
   app.use(cors());

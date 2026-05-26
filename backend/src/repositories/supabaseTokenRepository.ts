@@ -1,4 +1,4 @@
-import type { StoredXToken, TokenRepository } from "./tokenRepository.js";
+import { assertReadOnlyXScopes, type StoredXToken, type TokenRepository } from "./tokenRepository.js";
 
 export interface SupabaseOAuthConnectionRow {
   x_account_id: string;
@@ -32,6 +32,8 @@ export class SupabaseTokenRepository implements TokenRepository {
   constructor(private readonly store: SupabaseTokenStore) {}
 
   async saveXToken(token: StoredXToken): Promise<void> {
+    assertReadOnlyXScopes(token.scope);
+
     await this.store.upsertOAuthConnection({
       x_account_id: token.xAccountId,
       provider: token.provider,
@@ -53,6 +55,8 @@ export class SupabaseTokenRepository implements TokenRepository {
     if (!row || row.status === "revoked") {
       return null;
     }
+
+    assertReadOnlyXScopes(row.scope);
 
     return {
       xAccountId: row.x_account_id,

@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryTokenRepository } from "../repositories/tokenRepository.js";
+import { assertReadOnlyXScopes, InMemoryTokenRepository } from "../repositories/tokenRepository.js";
 import { SupabaseTokenRepository, type SupabaseOAuthConnectionRow, type SupabaseTokenStore } from "../repositories/supabaseTokenRepository.js";
 
 describe("Token repository boundary", () => {
+  it("rejects OAuth scopes outside the v0 read-only set", () => {
+    expect(() => assertReadOnlyXScopes(["tweet.read", "users.read", "offline.access"])).not.toThrow();
+    expect(() => assertReadOnlyXScopes(["tweet.read", "users.read", "offline.access", "follows.read"])).toThrow(
+      "unsupported_x_scope:follows.read",
+    );
+  });
+
   it("stores token references and can move an account to auth_expired", async () => {
     const repository = new InMemoryTokenRepository();
 
@@ -38,6 +45,22 @@ describe("Token repository boundary", () => {
 
     expect(await repository.findXToken("x-account-2")).toBeNull();
     expect(store.rows.get("x-account-2")?.status).toBe("revoked");
+  });
+
+  it("revalidates Supabase token scopes on read", async () => {
+    const store = new InMemorySupabaseTokenStore();
+    const repository = new SupabaseTokenRepository(store);
+
+    store.rows.set("x-account-3", {
+      x_account_id: "x-account-3",
+      provider: "x",
+      scope: ["tweet.read", "users.read", "offline.access", "follows.read"],
+      access_token_ref: "vault://x/oauth/access/3",
+      status: "active",
+      updated_at: "2026-05-26T04:30:00.000Z",
+    });
+
+    await expect(repository.findXToken("x-account-3")).rejects.toThrow("unsupported_x_scope:follows.read");
   });
 });
 
