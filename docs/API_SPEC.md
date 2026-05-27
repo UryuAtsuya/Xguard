@@ -31,3 +31,7 @@ The current prototype is a read-only API spike. It models OAuth intake, token re
 - Automated posting
 - Ban evasion flows
 - Public raw X API payloads
+
+## Validation Rules
+
+`POST /api/backup/run` already constrains `tweetLimit` at the HTTP boundary. `ApiUsageLedgerService` adds a second backend guard by rejecting negative, fractional, `NaN`, or infinite values for usage and summary counters before repository writes.
