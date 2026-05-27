@@ -34,6 +34,10 @@ Developer Console values still need manual confirmation before production pricin
 
 `ApiUsageLedgerService` is now the backend boundary for `backup_runs` plus `api_usage_events`. The prototype records one event per X API adapter call, attaches it to the backup run, and rolls up `api_units_used`, `estimated_cost_usd`, and the latest rate-limit metadata onto the completed run.
 
+## 2026-05-27 Validation Contract
+
+`ApiUsageLedgerService` rejects invalid numeric quantities before repository writes. `tweetLimit`, `resourceCount`, `rateLimitLimit`, `rateLimitRemaining`, `tweetsCaptured`, and `profilesCaptured` must be non-negative integers. Negative values, decimals, `NaN`, and `Infinity` are treated as programming or adapter errors and must not create `api_usage_events` or update `backup_runs`.
+
 Until Developer Console values are copied from the real app, the service uses conservative public read estimates:
 
 | Resource type | Prototype unit cost | Notes |

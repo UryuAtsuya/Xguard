@@ -8,6 +8,14 @@ describe("API usage ledger", () => {
     expect(estimateXApiReadCostUsd("follower", 100)).toBe(1);
   });
 
+  it("rejects invalid resource counts before estimating cost", () => {
+    for (const resourceCount of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => estimateXApiReadCostUsd("post", resourceCount)).toThrow(
+        "invalid_non_negative_integer:resourceCount",
+      );
+    }
+  });
+
   it("attaches usage events and cost totals to a backup run", async () => {
     const ledger = createInMemoryApiUsageLedgerService();
     const backupRun = await ledger.startBackupRun({
@@ -57,5 +65,57 @@ describe("API usage ledger", () => {
       rateLimitRemaining: 1499,
       rateLimitResetAt: "2026-05-26T04:45:00.000Z",
     });
+  });
+
+  it("rejects invalid backup and usage quantities before repository writes", async () => {
+    const ledger = createInMemoryApiUsageLedgerService();
+    const backupRun = await ledger.startBackupRun({
+      xAccountId: "x-account-1",
+      tweetLimit: 2,
+      startedAt: "2026-05-27T04:30:00.000Z",
+    });
+
+    await expect(
+      ledger.startBackupRun({
+        xAccountId: "x-account-1",
+        tweetLimit: -1,
+        startedAt: "2026-05-27T04:30:00.000Z",
+      }),
+    ).rejects.toThrow("invalid_non_negative_integer:tweetLimit");
+    await expect(
+      ledger.recordApiUsage({
+        userId: "user-1",
+        xAccountId: "x-account-1",
+        backupRunId: backupRun.id,
+        endpoint: "GET /2/users/:id/tweets",
+        resourceType: "post",
+        resourceCount: 0.5,
+        ownedRead: true,
+        statusCode: 200,
+        occurredAt: "2026-05-27T04:30:01.000Z",
+      }),
+    ).rejects.toThrow("invalid_non_negative_integer:resourceCount");
+    await expect(
+      ledger.recordApiUsage({
+        userId: "user-1",
+        xAccountId: "x-account-1",
+        backupRunId: backupRun.id,
+        endpoint: "GET /2/users/me",
+        resourceType: "user",
+        resourceCount: 1,
+        ownedRead: true,
+        rateLimitRemaining: Number.NaN,
+        statusCode: 200,
+        occurredAt: "2026-05-27T04:30:02.000Z",
+      }),
+    ).rejects.toThrow("invalid_non_negative_integer:rateLimitRemaining");
+    await expect(
+      ledger.completeBackupRun({
+        backupRunId: backupRun.id,
+        completedAt: "2026-05-27T04:30:03.000Z",
+        tweetsCaptured: Number.POSITIVE_INFINITY,
+        profilesCaptured: 1,
+      }),
+    ).rejects.toThrow("invalid_non_negative_integer:tweetsCaptured");
   });
 });

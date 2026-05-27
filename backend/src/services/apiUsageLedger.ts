@@ -48,10 +48,16 @@ export class ApiUsageLedgerService {
   constructor(private readonly repository: ApiUsageLedgerRepository) {}
 
   async startBackupRun(input: StartBackupRunInput): Promise<BackupRun> {
+    assertNonNegativeInteger("tweetLimit", input.tweetLimit);
+
     return this.repository.createBackupRun(input);
   }
 
   async recordApiUsage(input: RecordApiUsageInput): Promise<ApiUsageEvent> {
+    assertNonNegativeInteger("resourceCount", input.resourceCount);
+    assertOptionalNonNegativeInteger("rateLimitLimit", input.rateLimitLimit);
+    assertOptionalNonNegativeInteger("rateLimitRemaining", input.rateLimitRemaining);
+
     const event: ApiUsageEvent = {
       id: crypto.randomUUID(),
       userId: input.userId,
@@ -74,6 +80,9 @@ export class ApiUsageLedgerService {
   }
 
   async completeBackupRun(input: CompleteBackupRunInput): Promise<BackupRun> {
+    assertNonNegativeInteger("tweetsCaptured", input.tweetsCaptured);
+    assertNonNegativeInteger("profilesCaptured", input.profilesCaptured);
+
     const events = await this.repository.listApiUsageEvents(input.backupRunId);
     const latestRateLimitEvent = [...events].reverse().find((event) => event.rateLimitRemaining !== undefined);
 
@@ -164,9 +173,25 @@ export function createInMemoryApiUsageLedgerService(): ApiUsageLedgerService {
 }
 
 export function estimateXApiReadCostUsd(resourceType: ApiUsageEvent["resourceType"], resourceCount: number): number {
+  assertNonNegativeInteger("resourceCount", resourceCount);
+
   const unitCost = getConservativeUnitCostUsd(resourceType);
 
   return roundCost(unitCost * resourceCount);
+}
+
+function assertOptionalNonNegativeInteger(fieldName: string, value: number | undefined): void {
+  if (value === undefined) {
+    return;
+  }
+
+  assertNonNegativeInteger(fieldName, value);
+}
+
+function assertNonNegativeInteger(fieldName: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`invalid_non_negative_integer:${fieldName}`);
+  }
 }
 
 function getConservativeUnitCostUsd(resourceType: ApiUsageEvent["resourceType"]): number {
