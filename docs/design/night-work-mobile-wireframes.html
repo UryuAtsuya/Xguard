@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XGuard Mobile Wireframes</title>
+    <style>
+      :root {
+        --bg: #09070d;
+        --panel: #141019;
+        --panel-2: #21152b;
+        --text: #f8f2ff;
+        --muted: #b9a9c8;
+        --gold: #f6c76f;
+        --magenta: #ff4fbf;
+        --cyan: #64d8ff;
+        --danger: #ff6a7a;
+        --line: rgba(255, 255, 255, 0.13);
+        --shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        overflow-x: hidden;
+        background:
+          radial-gradient(circle at 18% 12%, rgba(255, 79, 191, 0.22), transparent 28%),
+          radial-gradient(circle at 86% 8%, rgba(246, 199, 111, 0.18), transparent 24%),
+          linear-gradient(135deg, #09070d 0%, #150d1d 52%, #08070b 100%);
+        color: var(--text);
+        font-family: Inter, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+      }
+
+      main {
+        width: 100%;
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 40px 28px 56px;
+        overflow-x: clip;
+      }
+
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 28px;
+        min-width: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        font-size: 36px;
+        line-height: 1.12;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .brief {
+        max-width: 520px;
+        color: var(--muted);
+        line-height: 1.65;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(220px, 1fr));
+        gap: 24px;
+        align-items: start;
+        justify-items: center;
+        min-width: 0;
+      }
+
+      .phone {
+        width: min(100%, 390px);
+        min-width: 220px;
+        border: 1px solid rgba(246, 199, 111, 0.28);
+        border-radius: 34px;
+        padding: 12px;
+        background: linear-gradient(160deg, #2c2135, #0b090f 45%, #070609);
+        box-shadow: var(--shadow);
+      }
+
+      .screen {
+        min-height: 720px;
+        overflow: hidden;
+        border-radius: 26px;
+        border: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(255, 79, 191, 0.12), transparent 22%),
+          linear-gradient(180deg, #120d18 0%, #0a0810 100%);
+        position: relative;
+      }
+
+      .screen::before {
+        content: "";
+        position: absolute;
+        top: 9px;
+        left: 50%;
+        width: 72px;
+        height: 18px;
+        transform: translateX(-50%);
+        border-radius: 999px;
+        background: #050408;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .content {
+        display: flex;
+        min-height: 720px;
+        flex-direction: column;
+        gap: 16px;
+        padding: 44px 18px 18px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .brand {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .pill,
+      .tab,
+      .badge {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 10px;
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      .hero {
+        display: grid;
+        gap: 12px;
+        padding: 22px 18px;
+        border: 1px solid rgba(246, 199, 111, 0.28);
+        border-radius: 24px;
+        background:
+          linear-gradient(145deg, rgba(246, 199, 111, 0.2), rgba(255, 79, 191, 0.11)),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .eyebrow {
+        color: var(--gold);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      h2 {
+        font-size: 27px;
+        line-height: 1.15;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .body {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.58;
+        overflow-wrap: anywhere;
+      }
+
+      .button {
+        min-height: 46px;
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 18px;
+        background: linear-gradient(135deg, var(--gold), #ff8ed6);
+        color: #190d18;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .ghost {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+
+      .card {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.055);
+      }
+
+      .card-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 750;
+      }
+
+      .metric {
+        font-size: 28px;
+        font-weight: 850;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .progress {
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.11);
+      }
+
+      .progress span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--magenta), var(--gold));
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 48px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--gold);
+        box-shadow: 0 0 18px rgba(246, 199, 111, 0.7);
+        flex: 0 0 auto;
+      }
+
+      .item strong {
+        display: block;
+        font-size: 12px;
+      }
+
+      .item span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .tab.active {
+        border-color: rgba(246, 199, 111, 0.55);
+        color: var(--gold);
+        background: rgba(246, 199, 111, 0.09);
+      }
+
+      .bottom-nav {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+      }
+
+      .nav-item {
+        min-height: 44px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .nav-item.active {
+        color: var(--gold);
+        background: rgba(246, 199, 111, 0.1);
+      }
+
+      .desktop {
+        grid-column: 1 / -1;
+        border: 1px solid rgba(246, 199, 111, 0.22);
+        border-radius: 24px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.055);
+        box-shadow: var(--shadow);
+      }
+
+      .desktop-grid {
+        display: grid;
+        grid-template-columns: 240px 1fr 320px;
+        gap: 18px;
+        margin-top: 16px;
+      }
+
+      .panel {
+        min-height: 280px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+        background: rgba(6, 5, 10, 0.62);
+      }
+
+      @media (max-width: 1220px) {
+        .board {
+          grid-template-columns: repeat(2, minmax(260px, 1fr));
+        }
+
+        .desktop-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        body,
+        main {
+          width: 100vw;
+          max-width: 100vw;
+        }
+
+        main {
+          padding: 24px 12px 40px;
+        }
+
+        header {
+          display: grid;
+        }
+
+        h1 {
+          font-size: 22px;
+          line-height: 1.18;
+          max-width: 340px;
+          word-break: break-all;
+        }
+
+        .brief {
+          max-width: 340px;
+          font-size: 14px;
+          word-break: break-all;
+        }
+
+        .board {
+          grid-template-columns: 1fr;
+          gap: 20px;
+          justify-items: start;
+        }
+
+        .phone {
+          width: 390px;
+          max-width: 390px;
+          min-width: 0;
+          transform: scale(0.88);
+          transform-origin: top left;
+          margin-bottom: -92px;
+        }
+
+        .screen,
+        .content {
+          min-height: 760px;
+        }
+
+        .desktop {
+          width: 100%;
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">XGuard / mobile-first wireframes</p>
+          <h1>夜職ユーザーのための、消える前に証明を残すXバックアップ体験</h1>
+        </div>
+        <p class="brief">
+          スマホ利用を主軸に、華やかさ・秘密保持・read-onlyの安心感を前面に出した初期ワイヤー。
+          PCは証明ページ確認と運用レビューの補助画面として扱う。
+        </p>
+      </header>
+
+      <section class="board">
+        <article class="phone">
+          <div class="screen">
+            <div class="content">
+              <div class="topbar"><span class="brand">XGuard</span><span class="pill">Private</span></div>
+              <section class="hero">
+                <p class="eyebrow">Account Risk Snapshot</p>
+                <h2>消える前に、証明を残す。</h2>
+                <p class="body">Xが止まっても、本人性・活動実績・再開導線を落ち着いて見せられるように。</p>
+                <div class="button">Xを安全に接続</div>
+              </section>
+              <section class="card">
+                <div class="card-title"><span>バックアップ準備</span><span>72%</span></div>
+                <div class="progress"><span style="width: 72%"></span></div>
+                <div class="row"><span>最終同期</span><strong>未接続</strong></div>
+              </section>
+              <section class="list">
+                <div class="item"><span class="dot"></span><div><strong>本人プロフィール保全</strong><span>名前、ID、プロフィール画像</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>直近投稿の控え</strong><span>公開用には自動で赤入れ</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>証明ページ</strong><span>初期状態は非公開</span></div></div>
+              </section>
+              <nav class="bottom-nav">
+                <span class="nav-item active">Home</span><span class="nav-item">Backup</span><span class="nav-item">Proof</span><span class="nav-item">Me</span>
+              </nav>
+            </div>
+          </div>
+        </article>
+
+        <article class="phone">
+          <div class="screen">
+            <div class="content">
+              <div class="topbar"><span class="brand">接続</span><span class="pill">Read only</span></div>
+              <section class="hero">
+                <p class="eyebrow">Permission Check</p>
+                <h2>投稿もDMも、勝手に触らない。</h2>
+                <p class="body">XGuard v0は読み取り専用。復旧準備に必要なプロフィールと投稿控えだけを保管します。</p>
+              </section>
+              <section class="card">
+                <div class="card-title"><span>許可する範囲</span><span>3 scopes</span></div>
+                <div class="list">
+                  <div class="item"><span class="dot"></span><div><strong>profile</strong><span>本人性を示す公開プロフィール</span></div></div>
+                  <div class="item"><span class="dot"></span><div><strong>recent posts</strong><span>活動実績の控え</span></div></div>
+                  <div class="item"><span class="dot"></span><div><strong>offline refresh</strong><span>定期バックアップ用</span></div></div>
+                </div>
+              </section>
+              <section class="card">
+                <div class="row"><span>自動投稿</span><strong>なし</strong></div>
+                <div class="row"><span>自動DM</span><strong>なし</strong></div>
+                <div class="row"><span>自動フォロー</span><strong>なし</strong></div>
+              </section>
+              <div class="button">Xで続ける</div>
+              <div class="button ghost">あとで確認</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="phone">
+          <div class="screen">
+            <div class="content">
+              <div class="topbar"><span class="brand">Backup</span><span class="pill">Healthy</span></div>
+              <section class="card">
+                <div class="card-title"><span>今夜の保全状況</span><span>02:14</span></div>
+                <div class="metric">148</div>
+                <p class="body">プロフィールと直近投稿を保存済み。証明ページは非公開で待機中。</p>
+              </section>
+              <div class="button">今すぐバックアップ</div>
+              <section class="list">
+                <div class="item"><span class="dot"></span><div><strong>Profile</strong><span>保存済み / 変更なし</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>Posts</strong><span>148件 / 削除検知なし</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>API cost guard</strong><span>月次上限の18%</span></div></div>
+              </section>
+              <section class="card">
+                <div class="card-title"><span>もし凍結されたら</span><span>Ready</span></div>
+                <p class="body">証明ページを確認し、見せたい情報だけ公開。新しい導線は手動で案内。</p>
+              </section>
+              <nav class="bottom-nav">
+                <span class="nav-item">Home</span><span class="nav-item active">Backup</span><span class="nav-item">Proof</span><span class="nav-item">Me</span>
+              </nav>
+            </div>
+          </div>
+        </article>
+
+        <article class="phone">
+          <div class="screen">
+            <div class="content">
+              <div class="topbar"><span class="brand">Proof</span><span class="pill">Private</span></div>
+              <section class="hero">
+                <p class="eyebrow">Proof Page Builder</p>
+                <h2>見せる情報を、自分で選ぶ。</h2>
+                <p class="body">公開前に赤入れ済みプレビューを確認。いつでも非公開化・失効できます。</p>
+              </section>
+              <div class="tabs">
+                <span class="tab active">Private</span><span class="tab">Unlisted</span><span class="tab">Public</span>
+              </div>
+              <section class="card">
+                <div class="card-title"><span>公開プレビュー</span><span>Redacted</span></div>
+                <div class="item"><span class="dot"></span><div><strong>@night_account</strong><span>プロフィール確認済み</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>活動履歴</strong><span>日時・本文の一部を伏せ字</span></div></div>
+              </section>
+              <div class="button">非公開リンクを作成</div>
+              <div class="button ghost">証明ページを失効</div>
+              <nav class="bottom-nav">
+                <span class="nav-item">Home</span><span class="nav-item">Backup</span><span class="nav-item active">Proof</span><span class="nav-item">Me</span>
+              </nav>
+            </div>
+          </div>
+        </article>
+
+        <article class="phone">
+          <div class="screen">
+            <div class="content">
+              <div class="topbar"><span class="brand">Settings</span><span class="pill">Discreet</span></div>
+              <section class="card">
+                <div class="card-title"><span>プライバシー</span><span>Default safe</span></div>
+                <div class="row"><span>証明ページ初期状態</span><strong>Private</strong></div>
+                <div class="row"><span>削除依頼</span><strong>即時受付</strong></div>
+                <div class="row"><span>公開停止</span><strong>ワンタップ</strong></div>
+              </section>
+              <section class="card">
+                <div class="card-title"><span>夜の営業導線</span><span>Manual</span></div>
+                <p class="body">新アカウントやリンク集はユーザーが自分で確認してから掲載。自動DMや自動フォローはしない。</p>
+              </section>
+              <section class="list">
+                <div class="item"><span class="dot"></span><div><strong>通知</strong><span>バックアップ失敗時だけ</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>課金</strong><span>月額プランとAPI利用上限</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>退会</strong><span>データ削除と証明失効</span></div></div>
+              </section>
+              <nav class="bottom-nav">
+                <span class="nav-item">Home</span><span class="nav-item">Backup</span><span class="nav-item">Proof</span><span class="nav-item active">Me</span>
+              </nav>
+            </div>
+          </div>
+        </article>
+
+        <section class="desktop">
+          <p class="eyebrow">Desktop companion</p>
+          <h2>PCは運用レビューと証明ページ確認の補助画面</h2>
+          <div class="desktop-grid">
+            <div class="panel">
+              <h3>Navigation</h3>
+              <div class="list" style="margin-top: 16px">
+                <div class="item"><span class="dot"></span><div><strong>Dashboard</strong><span>account health</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>Proof pages</strong><span>preview and revoke</span></div></div>
+                <div class="item"><span class="dot"></span><div><strong>Compliance</strong><span>manual queue</span></div></div>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Proof preview</h3>
+              <p class="body" style="margin-top: 12px">赤入れ後の公開ページを広い画面で確認。公開前レビュー、削除イベント、保護/凍結時の表示停止を確認する。</p>
+            </div>
+            <div class="panel">
+              <h3>Billing and API guard</h3>
+              <p class="body" style="margin-top: 12px">X APIの月次利用上限、バックアップ実行回数、失敗した同期を確認。運用者向けで、日常利用の主役にはしない。</p>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
