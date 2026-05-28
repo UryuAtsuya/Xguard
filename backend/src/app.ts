@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { z } from "zod";
 import { MockXApiClient } from "./clients/xApiClient.js";
+import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
 import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
@@ -9,18 +10,30 @@ import { MockBackupService } from "./services/mockBackupService.js";
 
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
-export function buildMockOAuthStartResponse() {
-  const scopeParam = V0_READ_ONLY_OAUTH_SCOPES.join("%20");
+export function buildOAuthStartResponse(config: RuntimeConfig = createRuntimeConfig()) {
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: config.xOAuth.clientId,
+    redirect_uri: config.xOAuth.callbackUrl,
+    scope: V0_READ_ONLY_OAUTH_SCOPES.join(" "),
+    state: "mock-state",
+    code_challenge: "mock-code-challenge",
+    code_challenge_method: "plain",
+  });
 
   return {
-    authorizationUrl: `https://x.com/i/oauth2/authorize?client_id=mock&scope=${scopeParam}`,
+    authorizationUrl: `https://x.com/i/oauth2/authorize?${params.toString()}`,
     scopes: [...V0_READ_ONLY_OAUTH_SCOPES],
     state: "mock-state",
+    mode: config.xOAuth.mode,
+    callbackUrl: config.xOAuth.callbackUrl,
     writesEnabled: false,
   };
 }
 
-export function createApp() {
+export const buildMockOAuthStartResponse = buildOAuthStartResponse;
+
+export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
   const usageLedger = createInMemoryApiUsageLedgerService();
@@ -35,12 +48,13 @@ export function createApp() {
       ok: true,
       service: "xguard-api",
       mode: "prototype",
+      xOAuthMode: config.xOAuth.mode,
       timestamp: new Date().toISOString(),
     });
   });
 
   app.get("/api/x/oauth/start", (_request, response) => {
-    response.json(buildMockOAuthStartResponse());
+    response.json(buildOAuthStartResponse(config));
   });
 
   app.get("/api/x/oauth/callback", async (request, response) => {

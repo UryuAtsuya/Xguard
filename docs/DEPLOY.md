@@ -28,6 +28,8 @@ APP_BASE_URL=
 
 `SUPABASE_SERVICE_ROLE_KEY`, X OAuth secrets, Stripe secrets, and token encryption keys belong only in backend or worker runtimes.
 
+For the current prototype, `X_CLIENT_ID` is the switch from mock OAuth metadata to configured OAuth metadata. `X_CALLBACK_URL` may be set directly; otherwise it falls back to `${APP_BASE_URL}/api/x/oauth/callback` or local port `4000`. `X_CLIENT_SECRET` is detected but not exchanged yet, so callback handling still stores repository references only.
+
 ## Build And Start
 
 ```bash

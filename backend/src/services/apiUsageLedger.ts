@@ -180,20 +180,6 @@ export function estimateXApiReadCostUsd(resourceType: ApiUsageEvent["resourceTyp
   return roundCost(unitCost * resourceCount);
 }
 
-function assertOptionalNonNegativeInteger(fieldName: string, value: number | undefined): void {
-  if (value === undefined) {
-    return;
-  }
-
-  assertNonNegativeInteger(fieldName, value);
-}
-
-function assertNonNegativeInteger(fieldName: string, value: number): void {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`invalid_non_negative_integer:${fieldName}`);
-  }
-}
-
 function getConservativeUnitCostUsd(resourceType: ApiUsageEvent["resourceType"]): number {
   switch (resourceType) {
     case "post":
@@ -211,4 +197,18 @@ function getConservativeUnitCostUsd(resourceType: ApiUsageEvent["resourceType"])
 
 function roundCost(cost: number): number {
   return Math.round(cost * 10000) / 10000;
+}
+
+function assertOptionalNonNegativeInteger(fieldName: string, value: number | undefined): void {
+  if (value === undefined) {
+    return;
+  }
+
+  assertNonNegativeInteger(fieldName, value);
+}
+
+function assertNonNegativeInteger(fieldName: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`api_usage_ledger_invalid_non_negative_integer:${fieldName}`);
+  }
 }

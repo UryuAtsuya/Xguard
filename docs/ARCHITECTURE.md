@@ -50,4 +50,6 @@ Replace `InMemoryTokenRepository` with `SupabaseTokenRepository` backed by a ser
 - updates the backup run summary after all events are recorded,
 - stops or marks the run before crossing `user_profiles.monthly_api_cost_limit_usd`.
 
-The service validates usage quantities before repository writes. Backup limits, resource counts, rate-limit counts, and captured snapshot totals must be non-negative integers so malformed adapter output cannot corrupt cost or quota rollups.
+## 2026-05-27 Ledger Validation
+
+The usage ledger validates metering counts at the service boundary before any repository write. Production Supabase code should preserve this order: validate input, create or append transactional rows, then roll up the completed `backup_runs` summary. Invalid negative, fractional, `NaN`, or infinite counts should fail before they can affect `api_usage_events` or monthly cost guardrails.

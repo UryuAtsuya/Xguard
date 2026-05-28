@@ -1,9 +1,10 @@
 import "dotenv/config";
 import { createApp } from "./app.js";
+import { createRuntimeConfig } from "./config/runtimeConfig.js";
 
-const port = Number(process.env.PORT ?? 4000);
-const app = createApp();
+const config = createRuntimeConfig();
+const app = createApp(config);
 
-app.listen(port, () => {
-  console.log(`XGuard API prototype listening on http://localhost:${port}`);
+app.listen(config.port, () => {
+  console.log(`XGuard API prototype listening on http://localhost:${config.port}`);
 });

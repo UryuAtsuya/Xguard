@@ -58,3 +58,9 @@ Confirm in X Developer Console:
 - whether Usage API access is available for the plan,
 - whether Owned Reads pricing applies to authenticated third-party SaaS backups,
 - rate-limit headers returned by the target endpoints.
+
+## 2026-05-27 Validation Contract
+
+`ApiUsageLedgerService` rejects invalid metering numbers before repository writes. The service now requires non-negative integers for `tweetLimit`, `resourceCount`, rate-limit counters, `tweetsCaptured`, and `profilesCaptured`. `estimateXApiReadCostUsd` also rejects invalid `resourceCount` values before calculating a cost estimate.
+
+This keeps the later Supabase transaction repository from persisting negative, fractional, `NaN`, or infinite usage totals. Developer Console values are still not manually confirmed in this environment, so the conservative prototype prices above remain the active implementation default.
