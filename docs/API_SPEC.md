@@ -35,3 +35,7 @@ The current prototype is a read-only API spike. It models OAuth intake, token re
 ## Validation Rules
 
 `POST /api/backup/run` already constrains `tweetLimit` at the HTTP boundary. `ApiUsageLedgerService` adds a second backend guard by rejecting negative, fractional, `NaN`, or infinite values for usage and summary counters before repository writes.
+
+## 2026-05-28 Supabase Ledger Adapter
+
+`SupabaseApiUsageLedgerRepository` is now the production-facing adapter boundary for `ApiUsageLedgerService`. It maps camelCase service DTOs to Supabase snake_case rows, wraps writes in a transaction store interface, and rejects new `api_usage_events` before the user's `monthly_api_cost_limit_usd` would be crossed.

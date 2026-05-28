@@ -61,4 +61,5 @@ node dist/backend/src/server.js
 
 - Railway backend must run the usage ledger with a service-role Supabase client only. Do not expose `SUPABASE_SERVICE_ROLE_KEY` to Vercel frontend builds.
 - Backup workers should stop when `monthly_api_cost_limit_usd` would be crossed and surface `rate_limited` or `failed` status instead of retrying indefinitely.
+- The production `SupabaseApiUsageLedgerStore` must execute `backup_runs` and `api_usage_events` changes in a database transaction and preserve the monthly cost-limit guard before insert.
 - Developer Console pricing, spending limit, and Usage API availability must be copied into `docs/API_COST_MODEL.md` before production pricing is treated as final.

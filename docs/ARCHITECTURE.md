@@ -53,3 +53,9 @@ Replace `InMemoryTokenRepository` with `SupabaseTokenRepository` backed by a ser
 ## 2026-05-27 Ledger Validation
 
 The usage ledger validates metering counts at the service boundary before any repository write. Production Supabase code should preserve this order: validate input, create or append transactional rows, then roll up the completed `backup_runs` summary. Invalid negative, fractional, `NaN`, or infinite counts should fail before they can affect `api_usage_events` or monthly cost guardrails.
+
+## 2026-05-28 Supabase Ledger Repository
+
+`SupabaseApiUsageLedgerRepository` keeps the service contract stable while introducing a Supabase transaction store boundary. The adapter creates `backup_runs`, inserts `api_usage_events`, lists events for rollup, and updates summaries through one interface that a real service-role Supabase client can implement later.
+
+Usage events now check the user's current monthly API cost status before insert. If the projected cost would cross `monthly_api_cost_limit_usd`, the adapter fails before persisting the event so backup workers can stop or mark the run without silently increasing paid usage.
