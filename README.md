@@ -36,6 +36,7 @@ v0の目的は、BANされたアカウントを自動復活させることでは
 
 ```text
 backend/       Express API prototype、mock X client、token repository boundary
+frontend/      Vite + React prototype、mobile-first XGuard操作画面
 shared/        将来frontend/backendで共有するTypeScript DTO
 supabase/      auth profile、X backup、proof page、compliance、Stripe eventの初期schema
 ```
@@ -45,6 +46,7 @@ supabase/      auth profile、X backup、proof page、compliance、Stripe event�
 ```bash
 npm install
 npm run dev:api
+npm run dev:web
 ```
 
 検証:
@@ -52,6 +54,8 @@ npm run dev:api
 ```bash
 npm run check
 ```
+
+`dev:web` は `http://localhost:5173` で起動し、`/api` と `/health` を `http://localhost:4000` のbackend prototypeへproxyします。
 
 ## 環境変数
 

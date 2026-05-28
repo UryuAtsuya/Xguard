@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildOAuthStartResponse, buildMockOAuthStartResponse } from "../app.js";
 import { MockXApiClient } from "../clients/xApiClient.js";
+import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "../fixtures/mockXData.js";
 import { MockBackupService } from "../services/mockBackupService.js";
 
@@ -31,6 +32,15 @@ describe("XGuard API prototype", () => {
     expect(authorizationUrl.searchParams.get("client_id")).toBe("real-client-id");
     expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("https://xguard.example.com/api/x/oauth/callback");
     expect(authorizationUrl.searchParams.get("scope")).toBe("tweet.read users.read offline.access");
+  });
+
+  it("builds the fallback callback URL without a doubled slash", async () => {
+    const config = createRuntimeConfig({
+      PORT: "4000",
+      APP_BASE_URL: "http://localhost:4000",
+    });
+
+    expect(config.xOAuth.callbackUrl).toBe("http://localhost:4000/api/x/oauth/callback");
   });
 
   it("runs a mock backup and serves its proof DTO", async () => {

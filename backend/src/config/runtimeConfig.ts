@@ -22,7 +22,7 @@ export type XOAuthRuntimeConfig =
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const port = parsePort(env.PORT);
   const appBaseUrl = parseOptionalUrl("APP_BASE_URL", env.APP_BASE_URL);
-  const fallbackCallbackUrl = `${appBaseUrl ?? `http://localhost:${port}`}/api/x/oauth/callback`;
+  const fallbackCallbackUrl = joinUrlPath(appBaseUrl ?? `http://localhost:${port}`, "/api/x/oauth/callback");
   const callbackUrl = parseOptionalUrl("X_CALLBACK_URL", env.X_CALLBACK_URL) ?? fallbackCallbackUrl;
   const clientId = env.X_CLIENT_ID?.trim();
   const clientSecret = env.X_CLIENT_SECRET?.trim();
@@ -79,4 +79,10 @@ function parseOptionalUrl(fieldName: string, value: string | undefined): string 
   } catch {
     throw new Error(`invalid_runtime_env:${fieldName}`);
   }
+}
+
+function joinUrlPath(baseUrl: string, path: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = [url.pathname.replace(/\/+$/, ""), path.replace(/^\/+/, "")].filter(Boolean).join("/");
+  return url.toString();
 }
