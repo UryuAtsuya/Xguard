@@ -268,3 +268,107 @@ create policy "Users can read own manual notification queue" on public.manual_no
 -- x_oauth_connections and stripe_events are service-role only.
 -- Insert/update/delete are service-role only for v0.
 -- Do not expose encrypted tokens, raw X payload, service role keys, or Stripe raw payloads to the frontend.
+
+create or replace function public.record_api_usage_event_with_monthly_limit(
+  p_id uuid,
+  p_user_id uuid,
+  p_x_account_id uuid,
+  p_backup_run_id uuid,
+  p_endpoint text,
+  p_method text,
+  p_resource_type text,
+  p_resource_count integer,
+  p_owned_read boolean,
+  p_estimated_cost_usd numeric,
+  p_rate_limit_limit integer,
+  p_rate_limit_remaining integer,
+  p_rate_limit_reset_at timestamptz,
+  p_status_code integer,
+  p_occurred_at timestamptz
+)
+returns public.api_usage_events
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  monthly_limit numeric(10, 4);
+  current_month_cost numeric(10, 4);
+  inserted_event public.api_usage_events%rowtype;
+begin
+  select user_profiles.monthly_api_cost_limit_usd
+    into monthly_limit
+    from public.user_profiles
+    where user_profiles.id = p_user_id
+    for update;
+
+  if monthly_limit is null then
+    raise exception 'api_usage_ledger_user_profile_not_found:%', p_user_id using errcode = 'P0001';
+  end if;
+
+  select coalesce(sum(api_usage_events.estimated_cost_usd), 0)
+    into current_month_cost
+    from public.api_usage_events
+    where api_usage_events.user_id = p_user_id
+      and api_usage_events.occurred_at >= date_trunc('month', p_occurred_at)
+      and api_usage_events.occurred_at < date_trunc('month', p_occurred_at) + interval '1 month';
+
+  if current_month_cost + p_estimated_cost_usd > monthly_limit then
+    raise exception 'api_usage_ledger_monthly_cost_limit_exceeded:%', p_user_id using errcode = 'P0001';
+  end if;
+
+  insert into public.api_usage_events (
+    id,
+    user_id,
+    x_account_id,
+    backup_run_id,
+    endpoint,
+    method,
+    resource_type,
+    resource_count,
+    owned_read,
+    estimated_cost_usd,
+    rate_limit_limit,
+    rate_limit_remaining,
+    rate_limit_reset_at,
+    status_code,
+    occurred_at
+  ) values (
+    p_id,
+    p_user_id,
+    p_x_account_id,
+    p_backup_run_id,
+    p_endpoint,
+    p_method,
+    p_resource_type,
+    p_resource_count,
+    p_owned_read,
+    p_estimated_cost_usd,
+    p_rate_limit_limit,
+    p_rate_limit_remaining,
+    p_rate_limit_reset_at,
+    p_status_code,
+    p_occurred_at
+  ) returning * into inserted_event;
+
+  return inserted_event;
+end;
+$$;
+
+revoke execute on function public.record_api_usage_event_with_monthly_limit(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  integer,
+  boolean,
+  numeric,
+  integer,
+  integer,
+  timestamptz,
+  integer,
+  timestamptz
+) from public, anon, authenticated;

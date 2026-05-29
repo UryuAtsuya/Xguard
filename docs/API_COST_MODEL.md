@@ -65,8 +65,10 @@ Confirm in X Developer Console:
 
 This keeps the later Supabase transaction repository from persisting negative, fractional, `NaN`, or infinite usage totals. Developer Console values are still not manually confirmed in this environment, so the conservative prototype prices above remain the active implementation default.
 
-## 2026-05-28 Supabase Repository Contract
+## 2026-05-28 Supabase Transaction Boundary
 
-`SupabaseApiUsageLedgerRepository` now provides the adapter boundary for the future service-role Supabase client. It checks the user's current monthly API cost before inserting an `api_usage_events` row and throws `api_usage_ledger_monthly_cost_limit_exceeded:<userId>` when the projected cost would exceed `monthly_api_cost_limit_usd`.
+`SupabaseApiUsageLedgerRepository` now provides the adapter boundary for the service-role Supabase client. It checks the user's current monthly API cost before inserting an `api_usage_events` row and throws `api_usage_ledger_monthly_cost_limit_exceeded:<userId>` when the projected cost would exceed `monthly_api_cost_limit_usd`.
 
-The concrete Supabase client is still future work. The current contract requires the real store to keep `backup_runs` summary updates and `api_usage_events` inserts transactional, and to leave no partial usage event behind when an insert or guard check fails.
+The schema also includes `record_api_usage_event_with_monthly_limit`, which locks the user's `user_profiles` row, sums the current month's `api_usage_events`, and rejects the insert before persistence if the new event would cross `monthly_api_cost_limit_usd`. This keeps cost-limit enforcement in the same database transaction as the usage event insert.
+
+The current store contract requires the real service-role implementation to keep `backup_runs` summary updates and `api_usage_events` inserts transactional, and to leave no partial usage event behind when an insert or guard check fails. The SQL function is not exposed to `public`, `anon`, or `authenticated` roles.
