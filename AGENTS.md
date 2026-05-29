@@ -25,6 +25,12 @@ Ship XGuard coding work quickly, safely, and with GitHub sync completed.
 - Keep raw X API payloads internal. Public proof pages must use a redacted DTO.
 - Token material must stay behind backend/service-repository boundaries and must not be exposed to frontend code.
 
+## Documentation Rules
+
+- Write documents under `docs/` in Japanese by default.
+- Keep code identifiers, file paths, command names, repository names, API names, and required product terms in their original spelling.
+- Use another language only when the user explicitly requests it or an external specification requires exact wording.
+
 ## Verification Rules
 
 - Run the smallest meaningful verification after code changes.

@@ -1,16 +1,16 @@
 # XGuard Deploy Notes
 
-Updated: 2026-05-25
+更新日: 2026-05-25
 
-## Target Topology
+## Target Topology（配置構成）
 
-| Runtime | Target | Notes |
+| Runtime | Target | 補足 |
 |---|---|---|
-| Frontend | Vercel | Future Next.js 14 App Router app under `frontend/` |
-| Backend API | Railway | Express API from `backend/src/server.ts` |
-| Database/Auth | Supabase | Postgres, Auth, RLS, service-role backend access |
-| Billing | Stripe | Webhooks must be idempotent through `stripe_events.event_id` |
-| Scheduler | Railway cron or separate worker | Run backups and health checks within X API cost/rate limits |
+| Frontend | Vercel | 将来の Next.js 14 App Router app は `frontend/` 配下に置く |
+| Backend API | Railway | `backend/src/server.ts` から Express API を起動する |
+| Database/Auth | Supabase | Postgres、Auth、RLS、service-role backend access |
+| Billing | Stripe | Webhooks は `stripe_events.event_id` で idempotent にする |
+| Scheduler | Railway cron または separate worker | X API cost/rate limits の範囲内で backups と health checks を実行する |
 
 ## Backend Environment
 
@@ -26,9 +26,9 @@ STRIPE_WEBHOOK_SECRET=
 APP_BASE_URL=
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY`, X OAuth secrets, Stripe secrets, and token encryption keys belong only in backend or worker runtimes.
+`SUPABASE_SERVICE_ROLE_KEY`、X OAuth secrets、Stripe secrets、token encryption keys は backend または worker runtimes にのみ置く。
 
-For the current prototype, `X_CLIENT_ID` is the switch from mock OAuth metadata to configured OAuth metadata. `X_CALLBACK_URL` may be set directly; otherwise it falls back to `${APP_BASE_URL}/api/x/oauth/callback` or local port `4000`. `X_CLIENT_SECRET` is detected but not exchanged yet, so callback handling still stores repository references only.
+現在の prototype では、`X_CLIENT_ID` が mock OAuth metadata から configured OAuth metadata へ切り替える switch である。`X_CALLBACK_URL` は直接設定でき、未設定の場合は `${APP_BASE_URL}/api/x/oauth/callback` または local port `4000` に fallback する。`X_CLIENT_SECRET` は検出するがまだ exchange しないため、callback handling は repository references の保存に留める。
 
 ## Build And Start
 
@@ -38,7 +38,7 @@ npm run build
 node dist/backend/src/server.js
 ```
 
-`npm run build` uses `tsconfig.build.json`, which excludes tests from production output. Run `npm run check` before deployment.
+`npm run build` は `tsconfig.build.json` を使い、tests を production output から除外する。deployment 前に `npm run check` を実行する。
 
 ## Release Gates
 
@@ -46,20 +46,20 @@ node dist/backend/src/server.js
 - `npm run build`
 - `npm run check`
 - `npx vitest run --configLoader runner`
-- X OAuth scopes confirmed as `tweet.read`, `users.read`, `offline.access`
-- Developer Console prices and spending limits copied into operations notes
-- Proof-page revocation and compliance event monitoring ready before public launch
+- X OAuth scopes が `tweet.read`、`users.read`、`offline.access` として confirmed
+- Developer Console prices と spending limits を operations notes に転記済み
+- public launch 前に proof-page revocation と compliance event monitoring が ready
 
-## Do Not Deploy With
+## この状態では Deploy しない
 
-- `follows.read`, DM, follow write, or tweet write scopes in v0.
-- Service-role keys exposed to frontend bundles.
-- Public routes returning raw X API payloads.
-- Automated DM/follow/posting jobs.
+- v0 に `follows.read`、DM、follow write、tweet write scopes が含まれている。
+- Service-role keys が frontend bundles に expose されている。
+- Public routes が raw X API payloads を返している。
+- Automated DM/follow/posting jobs がある。
 
 ## Backend Runtime Notes
 
-- Railway backend must run the usage ledger with a service-role Supabase client only. Do not expose `SUPABASE_SERVICE_ROLE_KEY` to Vercel frontend builds.
-- Backup workers should stop when `monthly_api_cost_limit_usd` would be crossed and surface `rate_limited` or `failed` status instead of retrying indefinitely.
-- The production `SupabaseApiUsageLedgerStore` must execute `backup_runs` and `api_usage_events` changes in a database transaction and preserve the monthly cost-limit guard before insert.
-- Developer Console pricing, spending limit, and Usage API availability must be copied into `docs/API_COST_MODEL.md` before production pricing is treated as final.
+- Railway backend は usage ledger を service-role Supabase client のみで実行する。`SUPABASE_SERVICE_ROLE_KEY` を Vercel frontend builds に expose しない。
+- Backup workers は `monthly_api_cost_limit_usd` を超える場合に stop し、無限 retry ではなく `rate_limited` または `failed` status を surface する。
+- production `SupabaseApiUsageLedgerStore` は `backup_runs` と `api_usage_events` の changes を database transaction 内で実行し、insert 前の monthly cost-limit guard を維持する必要がある。
+- production pricing を final として扱う前に、Developer Console pricing、spending limit、Usage API availability を `docs/API_COST_MODEL.md` に転記する必要がある。

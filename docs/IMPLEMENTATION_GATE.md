@@ -1,38 +1,38 @@
-# XGuard Implementation Gate
+# XGuard 実装ゲート
 
-Created: 2026-05-23
+作成日: 2026-05-23
 
-## Before Product Code
+## プロダクトコード着手前
 
-- Confirm endpoint-level pricing in X Developer Console.
-- Finalize read-only OAuth scopes.
-- Add secure OAuth token storage to the DB schema.
-- Add API usage tracking and backup run logging.
-- Add proof-page visibility, revocation, and redaction fields.
-- Add content compliance events.
-- Add Stripe webhook idempotency.
+- X Developer Console で endpoint 単位の料金を確認する。
+- 読み取り専用 OAuth scopes を確定する。
+- DB schema に安全な OAuth token 保存領域を追加する。
+- API usage tracking と backup run logging を追加する。
+- proof page の visibility、revocation、redaction fields を追加する。
+- content compliance events を追加する。
+- Stripe webhook の idempotency を追加する。
 
-## First Code Spike
+## 最初のコードスパイク
 
-1. OAuth callback skeleton.
-2. Token repository interface.
-3. X API client interface.
-4. Mock backup run that writes no external data.
-5. Proof DTO builder with fixture input.
+1. OAuth callback の skeleton。
+2. Token repository interface。
+3. X API client interface。
+4. 外部データを書き込まない mock backup run。
+5. fixture input を使う Proof DTO builder。
 
-## Do Not Build Yet
+## まだ作らないもの
 
 - Next.js marketing LP.
-- Automated DM.
-- Automated follow/unfollow.
-- Automated posting.
-- AI-generated mass outreach.
-- Public follower/following directory.
+- 自動 DM。
+- 自動 follow/unfollow。
+- 自動 posting。
+- AI 生成の大量 outreach。
+- 公開 follower/following directory。
 
-## Go Criteria
+## Go 条件
 
-- Read-only flow can be tested without write scopes.
-- Token storage design avoids plaintext token exposure to the frontend.
-- Proof payload is a separate DTO, not raw X API response JSON.
-- Each backup run records usage, rate limit headers, and errors.
-- Compliance deletion path is represented in schema before launch.
+- read-only flow が write scopes なしでテストできる。
+- token storage design が frontend への plaintext token 露出を避けている。
+- Proof payload は raw X API response JSON ではなく、別 DTO になっている。
+- 各 backup run が usage、rate limit headers、errors を記録する。
+- launch 前に compliance deletion path が schema 上で表現されている。

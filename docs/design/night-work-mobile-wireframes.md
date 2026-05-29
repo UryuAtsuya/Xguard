@@ -1,64 +1,64 @@
 # XGuard Night-Work Persona Mobile Wireframes
 
-Created: 2026-05-27
+作成日: 2026-05-27
 Figma draft: https://www.figma.com/design/UK9jDUA7VnwLW2zU3g72CU
 
 ## Goal
 
-Design a mobile-first XGuard experience for night-work users who rely on X for customer discovery, reputation, proof of identity, and continuity after account trouble.
+customer discovery、reputation、proof of identity、account trouble 後の continuity を X に依存する night-work users 向けに、mobile-first の XGuard experience を設計する。
 
 ## Persona Assumption
 
-- Uses X mainly from a phone between shifts, after work, or while moving.
-- Higher perceived risk of sudden account restriction, impersonation, deletion pressure, and reputation loss.
-- Needs the product to feel premium and discreet, not corporate or developer-heavy.
-- Wants a quick answer to: "If my account is gone tomorrow, what proof and restart path do I still have?"
+- shifts の合間、after work、移動中に phone から X を使うことが多い。
+- sudden account restriction、impersonation、deletion pressure、reputation loss の perceived risk が高い。
+- product には corporate や developer-heavy ではなく、premium で discreet な印象が必要。
+- 「明日アカウントが消えたら、どんな証明と再起動ルートが残るのか？」にすぐ答えたい。
 
 ## Visual Direction
 
-- Primary mood: dark lounge, champagne gold, magenta neon, glossy black.
-- Product posture: protective, private, prepared.
-- Avoid: ban-evasion language, automated outreach promises, raw X-data exposure, overly technical onboarding.
-- CTA language should emphasize backup, proof, revoke, and restart preparation.
+- Primary mood: dark lounge、champagne gold、magenta neon、glossy black。
+- Product posture: protective、private、prepared。
+- Avoid: ban-evasion language、automated outreach promises、raw X-data exposure、過度に technical な onboarding。
+- CTA language は backup、proof、revoke、restart preparation を強調する。
 
 ## Mobile Screen Set
 
 1. **Landing / Risk Snapshot**
-   - Lead with "消える前に、証明を残す。"
-   - Show account backup readiness, last sync, and proof-page privacy state.
-   - Primary CTA: "Xを安全に接続"
+   - "消える前に、証明を残す。" を先頭に置く。
+   - account backup readiness、last sync、proof-page privacy state を表示する。
+   - Primary CTA: "Xを安全に接続"。
 
 2. **Connect X / Permission Reassurance**
-   - Explain read-only OAuth before the action.
-   - Surface allowed scopes: profile, recent posts, offline refresh.
-   - Explicitly state no posting, no DM, no follow/unfollow.
+   - action 前に read-only OAuth を説明する。
+   - allowed scopes として profile、recent posts、offline refresh を見せる。
+   - posting なし、DM なし、follow/unfollow なしを明記する。
 
 3. **Backup Dashboard**
-   - Show account health, saved profile, saved posts, proof readiness.
-   - Make "今すぐバックアップ" reachable with one thumb.
-   - Display API/cost guardrails as a quiet trust marker.
+   - account health、saved profile、saved posts、proof readiness を表示する。
+   - "今すぐバックアップ" に親指 1 本で届くようにする。
+   - API/cost guardrails を控えめな trust marker として表示する。
 
-4. **Proof Page Builder**
-   - Default proof visibility: private.
-   - Let the user choose public/unlisted only after reviewing redactions.
-   - Include revoke and deletion controls as first-class actions.
+4. **証明ページ作成**
+   - Default proof visibility は private。
+   - redactions を review した後だけ、user が public/unlisted を選べるようにする。
+   - revoke と deletion controls を first-class actions として含める。
 
 5. **Desktop Companion**
-   - Treat desktop as an operations/review surface, not the primary experience.
-   - Use wider layout for proof preview, compliance queue, and billing status.
+   - desktop は primary experience ではなく operations/review surface として扱う。
+   - proof preview、compliance queue、billing status には wider layout を使う。
 
 ## Product Safety Notes
 
-- v0 remains read-only: `tweet.read`, `users.read`, `offline.access`.
-- Do not frame the service as ban evasion.
-- Public proof pages must use redacted DTOs, not raw X API payloads.
-- Keep proof pages private by default and revocable.
+- v0 は read-only のままにする: `tweet.read`、`users.read`、`offline.access`。
+- service を ban evasion として frame しない。
+- Public proof pages は raw X API payloads ではなく redacted DTOs を使う。
+- proof pages は default private かつ revocable に保つ。
 
 ## Figma Status
 
-The Figma file was created, but canvas editing hit the Figma MCP Starter plan limit before nodes could be written. A second direct-canvas write attempt on 2026-05-27 hit the same limit.
+Figma file は作成済みだが、nodes を書き込む前に canvas editing が Figma MCP Starter plan limit に達した。2026-05-27 の 2 回目の direct-canvas write attempt も同じ limit に当たった。
 
-Current editable artifact:
+現在の editable artifact:
 
 - `docs/design/night-work-mobile-wireframes.html`
 - `docs/design/figma-night-work-wireframe-import.js`
@@ -67,23 +67,23 @@ Rendered verification:
 
 - `output/playwright/night-work-wireframes-full.png`
 - `output/playwright/night-work-wireframes-mobile-page.png`
-- Rendered with Google Chrome headless at `1440x1900` and `390x1800`.
-- Verified screens: five mobile-first phone frames plus one desktop companion frame.
-- Mobile viewport was checked to keep the review page usable on a phone-width canvas, not just on a desktop board.
+- Google Chrome headless で `1440x1900` と `390x1800` を render した。
+- verified screens: 5 つの mobile-first phone frames と 1 つの desktop companion frame。
+- desktop board だけでなく phone-width canvas でも review page が使えることを mobile viewport で確認した。
 
-Next Figma step after quota is available:
+quota が利用可能になった後の次の Figma step:
 
-1. Open the draft Figma file.
-2. Run `docs/design/figma-night-work-wireframe-import.js` through `use_figma`.
-3. Confirm it creates six frames: Landing, Connect X, Backup, Proof, Settings, Desktop companion.
-4. Keep mobile frames primary and position the desktop frame as a lower-priority companion surface.
-5. Preserve the safety copy: read-only, no DM/post/follow automation, private proof by default, revocable proof pages.
+1. draft Figma file を開く。
+2. `docs/design/figma-night-work-wireframe-import.js` を `use_figma` 経由で実行する。
+3. Landing、Connect X、Backup、Proof、Settings、Desktop companion の 6 frames が作成されることを確認する。
+4. mobile frames を primary に保ち、desktop frame は lower-priority companion surface として配置する。
+5. safety copy を維持する: read-only、no DM/post/follow automation、private proof by default、revocable proof pages。
 
 ## Figma Import Notes
 
-The import script deliberately uses editable Figma primitives instead of screenshot placement:
+import script は screenshot placement ではなく、意図的に editable Figma primitives を使う。
 
-- Text remains editable for copy iteration.
-- Phone frames use separate layer groups for hero, cards, CTAs, and nav.
-- The visual system is encoded as reusable color constants: lounge black, champagne gold, magenta neon, muted lavender, and translucent line fills.
-- The desktop companion is one lower-priority frame below the phone set, matching the mobile-first product direction.
+- Text は copy iteration 用に editable のままにする。
+- Phone frames は hero、cards、CTAs、nav 用に separate layer groups を使う。
+- visual system は reusable color constants として encoded する: lounge black、champagne gold、magenta neon、muted lavender、translucent line fills。
+- desktop companion は phone set の下に置く lower-priority frame であり、mobile-first product direction に合わせる。

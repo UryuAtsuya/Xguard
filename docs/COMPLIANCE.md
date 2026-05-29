@@ -1,25 +1,25 @@
 # XGuard Compliance Contract
 
-Created: 2026-05-25
+作成日: 2026-05-25
 
-## Product Boundary
+## Product Boundary（プロダクト境界）
 
-XGuard stores user-authorized backup data and generates controlled proof pages. It must not automate behavior that looks like ban evasion, mass outreach, or platform manipulation.
+XGuard は user-authorized backup data を保存し、controlled proof pages を生成する。ban evasion、mass outreach、platform manipulation に見える行動を自動化してはならない。
 
-Excluded from v0:
+v0 から除外するもの:
 
-- automatic DM,
-- automatic follow/unfollow,
-- automated posting,
+- 自動 DM,
+- 自動 follow/unfollow,
+- 自動 posting,
 - follower list publication,
 - raw X payload publication,
-- instructions for bypassing X enforcement.
+- X enforcement を迂回する手順。
 
-## Deletion And Visibility
+## Deletion と Visibility
 
-Compliance events must be able to revoke public proof pages and hide deleted, protected, withheld, or user-requested content.
+Compliance events は public proof pages を revoke し、deleted、protected、withheld、または user-requested content を非表示にできる必要がある。
 
-Required event types:
+必要な event types:
 
 - `tweet_deleted`
 - `tweet_protected`
@@ -32,25 +32,25 @@ Required event types:
 
 ## Public Proof DTO Rules
 
-Proof pages use `ProofPublicPayload`, not raw API responses.
+Proof pages は raw API responses ではなく `ProofPublicPayload` を使う。
 
-Allowed public fields:
+公開できる fields:
 
-- username and display name,
+- username と display name,
 - public profile summary,
 - captured date range,
 - aggregate snapshot counts,
 - redacted representative posts,
-- public metrics needed for credibility.
+- 信頼性に必要な public metrics。
 
-Disallowed public fields:
+公開してはいけない fields:
 
-- OAuth token refs or raw tokens,
+- OAuth token refs または raw tokens,
 - service-role keys,
 - raw X API payloads,
 - private compliance notes,
-- raw Stripe webhook payloads.
+- raw Stripe webhook payloads。
 
 ## Manual Review Queue
 
-Recovery messaging remains a manual review queue. XGuard may draft copy for the owner to review, but v0 must not send messages or follow accounts automatically.
+Recovery messaging は manual review queue のまま扱う。XGuard は owner review 用の copy draft を作ってよいが、v0 では messages の送信や accounts の follow を自動実行してはならない。

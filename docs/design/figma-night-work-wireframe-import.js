@@ -1,4 +1,4 @@
-// Paste this into Figma MCP use_figma after the Starter plan call limit resets.
+// Starter plan の call limit がリセットされた後、これを Figma MCP use_figma に貼り付ける。
 // Target file: https://www.figma.com/design/UK9jDUA7VnwLW2zU3g72CU
 // Skill names: figma-use,figma-generate-design
 
@@ -113,9 +113,9 @@ function addPhone({ parent, name, x, y, eyebrow, title, copy, cta, activeTab, ca
   createdNodeIds.push(frame.id);
 
   addBox(frame, "Dynamic island", 150, 13, 90, 24, solid({ r: 0.018, g: 0.016, b: 0.025 }), 999, 0.08);
-  addText(frame, "Brand", name.startsWith("02") ? "接続" : name.startsWith("03") ? "Backup" : name.startsWith("04") ? "Proof" : name.startsWith("05") ? "Settings" : "XGuard", 24, 58, 170, 22, "Extra Bold");
+  addText(frame, "Brand", name.startsWith("02") ? "接続" : name.startsWith("03") ? "保全" : name.startsWith("04") ? "証明" : name.startsWith("05") ? "設定" : "XGuard", 24, 58, 170, 22, "Extra Bold");
   addBox(frame, "Status pill", 286, 55, 80, 30, solid(colors.line, 0.06), 999, 0.12);
-  addText(frame, "Status label", name.startsWith("02") ? "Read only" : name.startsWith("03") ? "Healthy" : name.startsWith("05") ? "Discreet" : "Private", 302, 63, 62, 11, "Semi Bold", colors.muted, 14);
+  addText(frame, "Status label", name.startsWith("02") ? "読取専用" : name.startsWith("03") ? "正常" : name.startsWith("05") ? "控えめ" : "非公開", 302, 63, 62, 11, "Semi Bold", colors.muted, 14);
 
   addBox(frame, "Hero panel", 24, 112, 342, 190, gradient({ ...colors.gold, a: 0.22 }, { ...colors.magenta, a: 0.14 }), 26, 0.22);
   addText(frame, "Hero eyebrow", eyebrow, 44, 136, 270, 12, "Bold", colors.gold, 15);
@@ -135,7 +135,7 @@ function addPhone({ parent, name, x, y, eyebrow, title, copy, cta, activeTab, ca
 
   const navY = 772;
   addBox(frame, "Bottom nav rail", 20, navY, 350, 52, solid(colors.line, 0.035), 20, 0.1);
-  ["Home", "Backup", "Proof", "Me"].forEach((label, i) => {
+  ["ホーム", "保全", "証明", "自分"].forEach((label, i) => {
     const nx = 34 + i * 84;
     if (label === activeTab) {
       addBox(frame, `Nav active ${label}`, nx - 8, navY + 8, 70, 36, solid(colors.gold, 0.12), 14, 0.1);
@@ -145,7 +145,7 @@ function addPhone({ parent, name, x, y, eyebrow, title, copy, cta, activeTab, ca
 }
 
 const board = figma.createFrame();
-board.name = "XGuard night-work persona wireframe board";
+board.name = "XGuard 夜職ペルソナワイヤーフレームボード";
 board.resize(2140, 1440);
 board.x = 80;
 board.y = 80;
@@ -154,23 +154,23 @@ board.fills = solid(colors.bg);
 figma.currentPage.appendChild(board);
 createdNodeIds.push(board.id);
 
-addText(board, "Board title", "XGuard mobile-first wireframes for night-work users", 36, 32, 1060, 34, "Extra Bold", colors.text, 42);
-addText(board, "Board copy", "Dark lounge visual direction: champagne gold, magenta neon, glossy black. Phone is the primary use case; desktop is a companion surface for proof review and operations.", 38, 84, 1120, 16, "Regular", colors.muted, 24);
+addText(board, "Board title", "夜職ユーザー向け XGuard モバイルファーストワイヤーフレーム", 36, 32, 1060, 34, "Extra Bold", colors.text, 42);
+addText(board, "Board copy", "dark lounge の visual direction: champagne gold、magenta neon、glossy black。phone を primary use case とし、desktop は proof review と operations の companion surface として扱う。", 38, 84, 1120, 16, "Regular", colors.muted, 24);
 
 addPhone({
   parent: board,
   name: "01 Landing / Risk Snapshot",
   x: 120,
   y: 210,
-  eyebrow: "ACCOUNT RISK SNAPSHOT",
-  title: "Proof before your account disappears.",
-  copy: "Premium, discreet backup for identity, activity proof, and restart links.",
-  cta: "Connect X safely",
-  activeTab: "Home",
+  eyebrow: "アカウントリスク概要",
+  title: "消える前に、証明を残す。",
+  copy: "本人性、活動実績、再起動リンクのための上質で控えめなバックアップ。",
+  cta: "Xを安全に接続",
+  activeTab: "ホーム",
   cards: [
-    { title: "Backup readiness", meta: "72%", body: "Profile, recent posts, and proof page draft are prepared." },
-    { title: "Private by default", meta: "Safe", body: "Proof pages start private and can be revoked at any time." },
-    { title: "No automation risk", meta: "Read-only", body: "No posting, no DM, no follow or unfollow actions." },
+    { title: "バックアップ準備", meta: "72%", body: "プロフィール、直近投稿、証明ページ下書きを準備済み。" },
+    { title: "初期状態は非公開", meta: "安全", body: "証明ページは非公開から始まり、いつでも失効できる。" },
+    { title: "自動化リスクなし", meta: "読取専用", body: "投稿、DM、follow/unfollow actions は行わない。" },
   ],
 });
 
@@ -179,15 +179,15 @@ addPhone({
   name: "02 Connect X / Permission Reassurance",
   x: 540,
   y: 210,
-  eyebrow: "PERMISSION CHECK",
-  title: "Read-only means read-only.",
-  copy: "Explain the permission boundary before OAuth. XGuard will not touch audience or messages.",
-  cta: "Continue with X",
-  activeTab: "Home",
+  eyebrow: "権限確認",
+  title: "読み取り専用は、読み取り専用。",
+  copy: "OAuth 前に permission boundary を説明する。XGuard は audience や messages に触れない。",
+  cta: "Xで続ける",
+  activeTab: "ホーム",
   cards: [
-    { title: "Allowed scopes", meta: "3", body: "tweet.read, users.read, offline.access for scheduled backup only." },
-    { title: "Never included", meta: "Blocked", body: "No automatic DM, posting, follow, unfollow, or ban evasion flows." },
-    { title: "Token safety", meta: "Backend", body: "Tokens stay behind backend repository boundaries." },
+    { title: "許可する scopes", meta: "3", body: "tweet.read、users.read、offline.access は scheduled backup のみに使う。" },
+    { title: "含めないもの", meta: "遮断", body: "自動 DM、posting、follow、unfollow、ban evasion flows は作らない。" },
+    { title: "Token 安全性", meta: "Backend", body: "Tokens は backend repository boundaries の内側に留める。" },
   ],
 });
 
@@ -196,32 +196,32 @@ addPhone({
   name: "03 Backup Dashboard",
   x: 960,
   y: 210,
-  eyebrow: "TONIGHT IS SAFE",
-  title: "Tonight is already backed up.",
-  copy: "One-thumb access to run backup and confirm proof readiness after a shift.",
-  cta: "Run backup now",
-  activeTab: "Backup",
+  eyebrow: "今夜は保全済み",
+  title: "今夜の分は、もう残っている。",
+  copy: "勤務後でも親指 1 本で backup を実行し、proof readiness を確認できる。",
+  cta: "今すぐバックアップ",
+  activeTab: "保全",
   cards: [
-    { title: "Saved snapshots", meta: "148", body: "Profile and recent public posts are stored for redacted proof generation." },
-    { title: "API cost guard", meta: "18%", body: "Usage limits are visible without making the screen feel technical." },
-    { title: "Account health", meta: "OK", body: "Revoked or expired auth states are surfaced early." },
+    { title: "保存済み snapshots", meta: "148", body: "プロフィールと直近公開投稿を redacted proof generation 用に保存済み。" },
+    { title: "API費用ガード", meta: "18%", body: "画面を technical にしすぎず usage limits を見せる。" },
+    { title: "アカウント状態", meta: "OK", body: "revoked または expired auth states を早めに surface する。" },
   ],
 });
 
 addPhone({
   parent: board,
-  name: "04 Proof Page Builder",
+  name: "04 証明ページ作成",
   x: 1380,
   y: 210,
-  eyebrow: "PROOF PAGE BUILDER",
-  title: "Choose what the public can see.",
-  copy: "Review redacted proof before sharing. Public and unlisted modes are opt-in.",
-  cta: "Create private link",
-  activeTab: "Proof",
+  eyebrow: "証明ページ作成",
+  title: "見せる情報を、自分で選ぶ。",
+  copy: "共有前に redacted proof を review する。public と unlisted modes は opt-in。",
+  cta: "非公開リンクを作成",
+  activeTab: "証明",
   cards: [
-    { title: "Visibility", meta: "Private", body: "Private by default, then unlisted or public only after preview." },
-    { title: "Redaction", meta: "On", body: "Raw X payloads are never exposed on the public proof page." },
-    { title: "Revoke controls", meta: "1 tap", body: "Proof pages can be revoked and deletion requests can be started." },
+    { title: "公開範囲", meta: "非公開", body: "初期状態は非公開。preview 後にのみ unlisted または public を選ぶ。" },
+    { title: "赤入れ", meta: "有効", body: "Raw X payloads は public proof page に expose しない。" },
+    { title: "失効操作", meta: "1 tap", body: "Proof pages の revoke と deletion requests の開始ができる。" },
   ],
 });
 
@@ -230,20 +230,20 @@ addPhone({
   name: "05 Settings / Discreet Controls",
   x: 1800,
   y: 210,
-  eyebrow: "DISCREET CONTROLS",
-  title: "Privacy controls stay close.",
-  copy: "Deletion, revoke, billing, and notification settings are reachable from the phone.",
-  cta: "Review settings",
-  activeTab: "Me",
+  eyebrow: "控えめな操作",
+  title: "プライバシー操作を近くに置く。",
+  copy: "deletion、revoke、billing、notification settings に phone から届くようにする。",
+  cta: "設定を確認",
+  activeTab: "自分",
   cards: [
-    { title: "Proof default", meta: "Private", body: "No public proof page is created without explicit review." },
-    { title: "Manual restart", meta: "Manual", body: "New account and link collection are reviewed by the user before sharing." },
-    { title: "Deletion request", meta: "Ready", body: "Deletion and proof revocation are first-class user actions." },
+    { title: "証明の初期状態", meta: "非公開", body: "explicit review なしで public proof page は作成しない。" },
+    { title: "手動再起動", meta: "手動", body: "new account と link collection は共有前に user が review する。" },
+    { title: "削除依頼", meta: "準備済み", body: "Deletion と proof revocation は first-class user actions。" },
   ],
 });
 
 const desktop = figma.createFrame();
-desktop.name = "06 Desktop companion / operations review";
+desktop.name = "06 デスクトップ補助画面 / 運用レビュー";
 desktop.resize(780, 430);
 desktop.x = 540;
 desktop.y = 1090;
@@ -252,16 +252,16 @@ desktop.fills = solid(colors.line, 0.055);
 desktop.strokes = solid(colors.gold, 0.22);
 board.appendChild(desktop);
 createdNodeIds.push(desktop.id);
-addText(desktop, "Desktop title", "Desktop is a companion, not the main product", 28, 28, 570, 26, "Extra Bold", colors.text, 34);
-addText(desktop, "Desktop body", "Use the larger screen for proof preview, compliance queues, API usage review, and billing guardrails. Keep the daily recovery-prep flow optimized for mobile.", 30, 76, 690, 15, "Regular", colors.muted, 24);
-["Proof preview", "Compliance queue", "Billing and API guard"].forEach((label, i) => {
+addText(desktop, "Desktop title", "Desktop は主役ではなく補助画面", 28, 28, 570, 26, "Extra Bold", colors.text, 34);
+addText(desktop, "Desktop body", "広い画面は proof preview、compliance queues、API usage review、billing guardrails に使う。日々の recovery-prep flow は mobile に最適化しておく。", 30, 76, 690, 15, "Regular", colors.muted, 24);
+["証明プレビュー", "コンプライアンスキュー", "課金とAPIガード"].forEach((label, i) => {
   const x = 30 + i * 240;
   addBox(desktop, `Desktop panel ${label}`, x, 150, 210, 220, solid(colors.bg, 0.72), 20, 0.12);
   addText(desktop, `Desktop panel title ${label}`, label, x + 18, 174, 160, 15, "Bold", colors.gold, 19);
   addText(
     desktop,
     `Desktop panel body ${label}`,
-    i === 0 ? "Review redacted public proof before sharing." : i === 1 ? "Track deletion, protected, withheld, and suspended events." : "Watch monthly usage and cost stop rules.",
+    i === 0 ? "共有前に redacted public proof を review する。" : i === 1 ? "deletion、protected、withheld、suspended events を track する。" : "monthly usage と cost stop rules を監視する。",
     x + 18,
     214,
     158,

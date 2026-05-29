@@ -1,38 +1,38 @@
 # XGuard X API Scope
 
-Created: 2026-05-23
+作成日: 2026-05-23
 
 ## v0 Position
 
-XGuard v0 is a read-only recovery preparation product.
+XGuard v0 は read-only recovery preparation product である。
 
-It connects to the user's own X account, backs up profile and recent post data with the user's authorization, and creates a controlled proof-page DTO. It does not promise account restoration and does not automate write actions.
+user 自身の X account に接続し、user authorization のもとで profile と recent post data を backup し、controlled proof-page DTO を作成する。account restoration は約束せず、write actions も自動化しない。
 
-## Required OAuth Scopes
+## 必須 OAuth Scopes
 
 - `tweet.read`
 - `users.read`
 - `offline.access`
 
-`follows.read` is P1 only. Do not request it in v0 until follower/following retention, privacy, and cost handling are confirmed.
+`follows.read` は P1 のみ。follower/following retention、privacy、cost handling が確認されるまで、v0 では request しない。
 
-## Avoid in v0
+## v0 で避けるもの
 
 - `tweet.write`
 - `follows.write`
 - DM write scopes
-- Any scope needed only for automated posting, automated DM, or automated follow/unfollow
+- automated posting、automated DM、automated follow/unfollow だけに必要な scopes
 
-## Initial Endpoints
+## 初期 Endpoints
 
-| Purpose | Endpoint | v0 Use |
+| 目的 | Endpoint | v0 の使い方 |
 |---|---|---|
-| Authenticated user | `GET /2/users/me` | Identify connected account |
-| Profile lookup | `GET /2/users/:id` | Save profile snapshot |
-| Recent posts | `GET /2/users/:id/tweets` | Save recent owned posts |
-| Followers | `GET /2/users/:id/followers` | P1, not public by default |
-| Following | `GET /2/users/:id/following` | P1, not public by default |
-| Usage | `GET /2/usage/tweets` | Track API consumption |
+| Authenticated user | `GET /2/users/me` | connected account を識別する |
+| Profile lookup | `GET /2/users/:id` | profile snapshot を保存する |
+| Recent posts | `GET /2/users/:id/tweets` | recent owned posts を保存する |
+| Followers | `GET /2/users/:id/followers` | P1。default では public にしない |
+| Following | `GET /2/users/:id/following` | P1。default では public にしない |
+| Usage | `GET /2/usage/tweets` | API consumption を track する |
 
 ## Field Sets
 
@@ -57,12 +57,12 @@ media.fields=url,preview_image_url,alt_text,public_metrics
 
 ## Storage Rules
 
-- Store raw payload internally only when required for debugging or reprocessing.
-- Never publish raw payload directly.
-- Generate `proof_pages.public_payload` as a redacted DTO.
-- Keep follower/following individual lists private until policy and privacy handling are confirmed.
-- Store API usage and rate-limit headers per backup run.
-- Track deletion/protected/withheld/user deletion requests in a compliance queue.
+- debugging または reprocessing に必要な場合のみ、raw payload を internal に保存する。
+- raw payload を直接 publish しない。
+- `proof_pages.public_payload` は redacted DTO として生成する。
+- policy と privacy handling が確認されるまで、follower/following individual lists は private に保つ。
+- backup run ごとに API usage と rate-limit headers を保存する。
+- deletion/protected/withheld/user deletion requests を compliance queue で track する。
 
 ## Product Copy Rules
 
@@ -71,12 +71,12 @@ media.fields=url,preview_image_url,alt_text,public_metrics
 - Say: "事前バックアップ"
 - Do not say: "BAN復活"
 - Do not say: "自動復元"
-- Do not imply ban evasion.
+- ban evasion を示唆しない。
 
-## Open Questions
+## 未解決 Questions
 
-- Developer Console endpoint-level prices.
-- Exact monthly API cost for a 3,000 JPY/month subscription.
-- Whether media files can be copied to XGuard storage or only referenced.
-- Whether follower/following IDs can be stored for recovery use and under what retention rules.
-- Whether Supabase Vault is sufficient for refresh token encryption.
+- Developer Console endpoint-level prices。
+- 3,000 JPY/month subscription の exact monthly API cost。
+- media files を XGuard storage に copy できるか、reference のみにするべきか。
+- follower/following IDs を recovery use 用に保存できるか、また retention rules は何か。
+- Supabase Vault が refresh token encryption に十分か。

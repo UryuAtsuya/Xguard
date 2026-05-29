@@ -1,41 +1,41 @@
-# XGuard API Spec
+# XGuard API 仕様
 
-Created: 2026-05-24
+作成日: 2026-05-24
 
-## v0 Backend Scope
+## v0 Backend 範囲
 
-The current prototype is a read-only API spike. It models OAuth intake, token repository boundaries, a mock backup run, usage/cost ledger rollups, and proof-page DTO generation.
+現在の prototype は read-only API spike である。OAuth intake、token repository boundary、mock backup run、usage/cost ledger rollup、proof-page DTO generation をモデル化する。
 
-## Routes
+## Routes 一覧
 
-| Method | Path | Purpose | External writes |
+| Method | Path | 目的 | 外部書き込み |
 |---|---|---|---|
-| GET | `/health` | API health check | No |
-| GET | `/api/x/oauth/start` | Return read-only X OAuth authorization metadata | No |
-| GET | `/api/x/oauth/callback` | Validate callback shape and store token references in the repository interface | No |
-| POST | `/api/backup/run` | Run fixture-backed mock backup and roll up usage/cost metadata | No |
-| GET | `/api/backup/status/:runId` | Read mock backup status | No |
-| GET | `/api/recovery/:runId/proof` | Return redacted proof DTO for a mock backup | No |
+| GET | `/health` | API health check | なし |
+| GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata を返す | なし |
+| GET | `/api/x/oauth/callback` | callback shape を検証し、repository interface に token references を保存する | なし |
+| POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する | なし |
+| GET | `/api/backup/status/:runId` | mock backup status を読む | なし |
+| GET | `/api/recovery/:runId/proof` | mock backup 用の redacted proof DTO を返す | なし |
 
-## Backend Interfaces To Replace
+## 置き換え予定の Backend Interfaces
 
-- `TokenRepository`: replace in-memory token refs with `SupabaseTokenRepository` backed by service-role storage and Vault/encryption handling. The repository must support `auth_expired` transitions and token revocation without exposing raw token material to the frontend.
-- `XApiClient`: replace fixture data with X API calls limited to `tweet.read`, `users.read`, and `offline.access` for v0. Add `follows.read` only after follower/following retention, privacy, and cost handling are approved.
-- `ApiUsageLedgerService`: replace the in-memory repository with a Supabase transaction that creates `backup_runs`, records `api_usage_events`, and rolls up cost/rate-limit metadata before completion.
-- `MockBackupService`: replace fixture-backed calls with a transactional backup runner that writes snapshots, usage events, and rate-limit metadata.
+- `TokenRepository`: in-memory token refs を、service-role storage と Vault/encryption handling に支えられた `SupabaseTokenRepository` に置き換える。repository は raw token material を frontend に露出せず、`auth_expired` transitions と token revocation を扱える必要がある。
+- `XApiClient`: fixture data を、v0 では `tweet.read`、`users.read`、`offline.access` に限定した X API calls に置き換える。`follows.read` は follower/following retention、privacy、cost handling が承認された後だけ追加する。
+- `ApiUsageLedgerService`: in-memory repository を、`backup_runs` を作成し、`api_usage_events` を記録し、完了前に cost/rate-limit metadata を roll up する Supabase transaction に置き換える。
+- `MockBackupService`: fixture-backed calls を、snapshots、usage events、rate-limit metadata を書き込む transactional backup runner に置き換える。
 
-## Deliberately Excluded
+## 意図的に除外するもの
 
-- Automatic DM
-- Automatic follow/unfollow
-- Automated posting
-- Ban evasion flows
-- Public raw X API payloads
+- 自動 DM
+- 自動 follow/unfollow
+- 自動 posting
+- ban evasion flows
+- 公開 raw X API payloads
 
 ## Validation Rules
 
-`POST /api/backup/run` already constrains `tweetLimit` at the HTTP boundary. `ApiUsageLedgerService` adds a second backend guard by rejecting negative, fractional, `NaN`, or infinite values for usage and summary counters before repository writes.
+`POST /api/backup/run` は HTTP boundary で `tweetLimit` をすでに制約している。`ApiUsageLedgerService` は repository writes の前に、usage と summary counters の negative、fractional、`NaN`、infinite values を拒否することで、2 段目の backend guard を追加する。
 
 ## 2026-05-28 Supabase Ledger Adapter
 
-`SupabaseApiUsageLedgerRepository` is now the production-facing adapter boundary for `ApiUsageLedgerService`. It maps camelCase service DTOs to Supabase snake_case rows, wraps writes in a transaction store interface, and rejects new `api_usage_events` before the user's `monthly_api_cost_limit_usd` would be crossed.
+`SupabaseApiUsageLedgerRepository` は `ApiUsageLedgerService` の production-facing adapter boundary である。camelCase service DTOs を Supabase snake_case rows に map し、writes を transaction store interface で包み、user の `monthly_api_cost_limit_usd` を超える前に新しい `api_usage_events` を拒否する。

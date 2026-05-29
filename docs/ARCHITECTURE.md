@@ -1,61 +1,61 @@
 # XGuard Architecture
 
-Created: 2026-05-25
+作成日: 2026-05-25
 
-## Current Shape
+## 現在の構成
 
-XGuard is a read-only recovery preparation service. The implementation repo keeps product code outside the MyLife Vault and separates prototype concerns into:
+XGuard は read-only recovery preparation service である。implementation repo は product code を MyLife Vault の外に置き、prototype の関心事を次のように分ける。
 
 ```text
-backend/   Express API, repository boundaries, backup/proof services, usage ledger
-shared/    DTOs shared by frontend and backend
-docs/      implementation contracts and deployment notes
+backend/   Express API、repository boundaries、backup/proof services、usage ledger
+shared/    frontend と backend で共有する DTOs
+docs/      implementation contracts と deployment notes
 ```
 
-The frontend and Supabase-backed persistence layer are still planned. The current backend prototype is intentionally fixture-backed so the API boundary can be reviewed before live X API calls or paid usage are introduced.
+frontend と Supabase-backed persistence layer はまだ計画段階である。現在の backend prototype は意図的に fixture-backed にしており、live X API calls や paid usage を導入する前に API boundary を review できるようにしている。
 
 ## v0 Request Flow
 
-1. A user starts X OAuth with the minimum scope: `tweet.read`, `users.read`, `offline.access`.
-2. The callback stores token references only. Raw token material must stay in a backend-only secret store such as Supabase Vault or an equivalent KMS-backed table.
-3. A backup run reads the user's own profile and recent posts.
-4. The backend records one usage event per X API adapter call and rolls up conservative cost plus latest rate-limit metadata onto the backup run.
-5. The real Supabase adapter must write account snapshots, tweet snapshots, backup run status, and API usage events in one transactional unit.
-6. Proof pages are generated from a redacted public DTO. Raw X API payloads are never published.
-7. Compliance events can revoke proof pages or mark deleted/protected/withheld content for removal.
+1. user が最小 scope の `tweet.read`、`users.read`、`offline.access` で X OAuth を開始する。
+2. callback は token references だけを保存する。Raw token material は Supabase Vault または同等の KMS-backed table など、backend-only secret store に留める。
+3. backup run は user 自身の profile と recent posts を読む。
+4. backend は X API adapter call ごとに usage event を 1 件記録し、conservative cost と最新 rate-limit metadata を backup run に roll up する。
+5. real Supabase adapter は account snapshots、tweet snapshots、backup run status、API usage events を 1 つの transactional unit で書き込む必要がある。
+6. Proof pages は redacted public DTO から生成する。Raw X API payloads は公開しない。
+7. Compliance events は proof pages を revoke したり、deleted/protected/withheld content を removal 対象として mark できる。
 
 ## Safety Boundaries
 
-- No automatic DM, follow/unfollow, posting, or ban evasion workflow.
-- No `follows.read` in v0 until retention, privacy, and cost are approved.
-- Frontend code never receives token refs, raw tokens, service-role keys, or raw Stripe payloads.
-- Account state transitions use `connected`, `auth_expired`, `rate_limited`, `suspected_banned`, `banned`, `deleted`, and `unknown` instead of claiming final ban status from one failed request.
+- 自動 DM、follow/unfollow、posting、ban evasion workflow は作らない。
+- retention、privacy、cost が承認されるまで、v0 では `follows.read` を使わない。
+- Frontend code は token refs、raw tokens、service-role keys、raw Stripe payloads を受け取らない。
+- Account state transitions は、1 回の failed request から final ban status を断定せず、`connected`、`auth_expired`、`rate_limited`、`suspected_banned`、`banned`、`deleted`、`unknown` を使う。
 
-## Next Implementation Boundary
+## 次の実装境界
 
-Replace `InMemoryTokenRepository` with `SupabaseTokenRepository` backed by a service-role store. The repository contract should support:
+`InMemoryTokenRepository` を service-role store に支えられた `SupabaseTokenRepository` に置き換える。repository contract は次を support する必要がある。
 
-- saving token references after OAuth callback,
-- reading non-revoked token references for backend jobs,
-- moving accounts to `auth_expired`,
-- revoking token rows after user deletion or disconnect.
+- OAuth callback 後に token references を保存する。
+- backend jobs 用に non-revoked token references を読む。
+- accounts を `auth_expired` に移す。
+- user deletion または disconnect 後に token rows を revoke する。
 
 
-## 2026-05-26 Ledger Boundary
+## 2026-05-26 Ledger 境界
 
-`ApiUsageLedgerService` is the backend contract for cost-aware backup runs. The prototype remains in-memory, but the production repository must use a Supabase transaction that:
+`ApiUsageLedgerService` は cost-aware backup runs の backend contract である。prototype は in-memory のままだが、production repository は次を行う Supabase transaction を使う必要がある。
 
-- creates the `backup_runs` row before X API calls,
-- inserts `api_usage_events` with endpoint, resource count, conservative estimated cost, and rate-limit headers,
-- updates the backup run summary after all events are recorded,
-- stops or marks the run before crossing `user_profiles.monthly_api_cost_limit_usd`.
+- X API calls の前に `backup_runs` row を作成する。
+- endpoint、resource count、conservative estimated cost、rate-limit headers 付きで `api_usage_events` を insert する。
+- すべての events を記録した後に backup run summary を update する。
+- `user_profiles.monthly_api_cost_limit_usd` を超える前に run を stop または mark する。
 
-## 2026-05-27 Ledger Validation
+## 2026-05-27 Ledger 検証
 
-The usage ledger validates metering counts at the service boundary before any repository write. Production Supabase code should preserve this order: validate input, create or append transactional rows, then roll up the completed `backup_runs` summary. Invalid negative, fractional, `NaN`, or infinite counts should fail before they can affect `api_usage_events` or monthly cost guardrails.
+usage ledger は repository write の前に service boundary で metering counts を validate する。Production Supabase code は、input を validate し、transactional rows を create または append し、その後 completed `backup_runs` summary を roll up する、という順序を維持する必要がある。Invalid negative、fractional、`NaN`、infinite counts は、`api_usage_events` や monthly cost guardrails に影響する前に fail させる。
 
 ## 2026-05-28 Supabase Ledger Repository
 
-`SupabaseApiUsageLedgerRepository` keeps the service contract stable while introducing a Supabase transaction store boundary. The adapter creates `backup_runs`, inserts `api_usage_events`, lists events for rollup, and updates summaries through one interface that a real service-role Supabase client can implement later.
+`SupabaseApiUsageLedgerRepository` は Supabase transaction store boundary を導入しながら service contract を安定させる。adapter は `backup_runs` を作成し、`api_usage_events` を insert し、rollup 用 events を list し、後で real service-role Supabase client が実装できる 1 つの interface 経由で summaries を update する。
 
-Usage events now check the user's current monthly API cost status before insert. If the projected cost would cross `monthly_api_cost_limit_usd`, the adapter fails before persisting the event so backup workers can stop or mark the run without silently increasing paid usage.
+Usage events は insert 前に user の current monthly API cost status を確認する。Projected cost が `monthly_api_cost_limit_usd` を超える場合、adapter は event を persist する前に fail するため、backup workers は paid usage を無言で増やさずに run を stop または mark できる。
