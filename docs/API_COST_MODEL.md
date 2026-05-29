@@ -72,3 +72,11 @@ X Developer Console で確認すること:
 schema には `record_api_usage_event_with_monthly_limit` も含まれる。この function は user の `user_profiles` row を lock し、current month の `api_usage_events` を sum し、新しい event が `monthly_api_cost_limit_usd` を超える場合は persistence 前に insert を拒否する。これにより、cost-limit enforcement を usage event insert と同じ database transaction 内に保つ。
 
 現在の store contract は、real service-role implementation に対し、`backup_runs` summary updates と `api_usage_events` inserts を transactional に保ち、insert または guard check が fail した場合に partial usage event を残さないことを求める。SQL function は `public`、`anon`、`authenticated` roles には expose しない。
+
+## 2026-05-29 Production Boundary Follow-up
+
+Supabase schema の `public.record_api_usage_event_with_monthly_limit` は、production insert boundary として、`user_profiles` を `for update` で lock し、current calendar month の `api_usage_events.estimated_cost_usd` を合算してから insert 可否を判断する。
+
+この function は optional な `x_account_id` と `backup_run_id` が同じ user と同じ X account に属することを検証し、negative metering values を拒否する。`security definer` だが execute は `service_role` のみに grant し、`public`、`anon`、`authenticated` からは revoke する。
+
+Repository row mapping は Supabase `numeric` の `estimated_cost_usd` が string で返る場合も `Number(...)` で domain DTO の number に揃える。これにより backup-run rollup と API usage event の型境界を維持する。

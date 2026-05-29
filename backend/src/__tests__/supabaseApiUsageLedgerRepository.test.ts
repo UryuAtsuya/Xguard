@@ -65,6 +65,41 @@ describe("Supabase API usage ledger repository", () => {
     expect(store.backupRuns.get(backupRun.id)?.estimated_cost_usd).toBe(0.02);
   });
 
+  it("maps Supabase numeric estimated costs returned as strings", async () => {
+    const store = new InMemorySupabaseApiUsageLedgerStore();
+    store.returnEstimatedCostsAsStrings = true;
+    store.monthlyCosts.set("user-1", { monthlyApiCostLimitUsd: 0.05, estimatedCostUsdSoFar: 0 });
+    const ledger = new ApiUsageLedgerService(new SupabaseApiUsageLedgerRepository(store));
+
+    const backupRun = await ledger.startBackupRun({
+      xAccountId: "x-account-1",
+      tweetLimit: 2,
+      startedAt: "2026-05-29T04:30:00.000Z",
+    });
+    const event = await ledger.recordApiUsage({
+      userId: "user-1",
+      xAccountId: "x-account-1",
+      backupRunId: backupRun.id,
+      endpoint: "GET /2/users/:id/tweets",
+      resourceType: "post",
+      resourceCount: 2,
+      ownedRead: true,
+      occurredAt: "2026-05-29T04:30:01.000Z",
+    });
+
+    const completed = await ledger.completeBackupRun({
+      backupRunId: backupRun.id,
+      completedAt: "2026-05-29T04:30:02.000Z",
+      tweetsCaptured: 2,
+      profilesCaptured: 0,
+    });
+
+    expect(event.estimatedCostUsd).toBe(0.01);
+    expect(typeof event.estimatedCostUsd).toBe("number");
+    expect(completed.estimatedCostUsd).toBe(0.01);
+    expect(typeof completed.estimatedCostUsd).toBe("number");
+  });
+
   it("rejects usage events before crossing the user's monthly API cost limit", async () => {
     const store = new InMemorySupabaseApiUsageLedgerStore();
     store.monthlyCosts.set("user-1", { monthlyApiCostLimitUsd: 0.015, estimatedCostUsdSoFar: 0.01 });
@@ -124,6 +159,7 @@ class InMemorySupabaseApiUsageLedgerStore implements SupabaseApiUsageLedgerStore
   readonly usageEvents: SupabaseApiUsageEventRow[] = [];
   readonly monthlyCosts = new Map<string, MonthlyApiCostStatus>();
   failNextUsageInsert = false;
+  returnEstimatedCostsAsStrings = false;
 
   async runInTransaction<T>(operation: (transaction: SupabaseApiUsageLedgerTransaction) => Promise<T>): Promise<T> {
     const backupRuns = new Map(this.backupRuns);
@@ -148,7 +184,7 @@ class InMemorySupabaseApiUsageLedgerTransaction implements SupabaseApiUsageLedge
 
   async insertBackupRun(row: SupabaseBackupRunRow): Promise<SupabaseBackupRunRow> {
     this.backupRuns.set(row.id, row);
-    return row;
+    return this.toReturnedBackupRunRow(row);
   }
 
   async insertApiUsageEvent(row: SupabaseApiUsageEventRow): Promise<SupabaseApiUsageEventRow> {
@@ -158,11 +194,13 @@ class InMemorySupabaseApiUsageLedgerTransaction implements SupabaseApiUsageLedge
     }
 
     this.usageEvents.push(row);
-    return row;
+    return this.toReturnedApiUsageEventRow(row);
   }
 
   async listApiUsageEvents(backupRunId: string): Promise<SupabaseApiUsageEventRow[]> {
-    return this.usageEvents.filter((event) => event.backup_run_id === backupRunId);
+    return this.usageEvents
+      .filter((event) => event.backup_run_id === backupRunId)
+      .map((event) => this.toReturnedApiUsageEventRow(event));
   }
 
   async updateBackupRunSummary(input: SupabaseBackupRunSummaryUpdate): Promise<SupabaseBackupRunRow> {
@@ -188,7 +226,7 @@ class InMemorySupabaseApiUsageLedgerTransaction implements SupabaseApiUsageLedge
 
     this.backupRuns.set(input.id, updated);
 
-    return updated;
+    return this.toReturnedBackupRunRow(updated);
   }
 
   async getMonthlyApiCostStatus(input: { userId: string; occurredAt: string }): Promise<MonthlyApiCostStatus | null> {
@@ -209,6 +247,22 @@ class InMemorySupabaseApiUsageLedgerTransaction implements SupabaseApiUsageLedge
 
     return this.usageEvents
       .filter((event) => event.user_id === userId && event.occurred_at.startsWith(month))
-      .reduce((total, event) => total + event.estimated_cost_usd, 0);
+      .reduce((total, event) => total + Number(event.estimated_cost_usd), 0);
+  }
+
+  private toReturnedBackupRunRow(row: SupabaseBackupRunRow): SupabaseBackupRunRow {
+    if (!this.parent.returnEstimatedCostsAsStrings) {
+      return row;
+    }
+
+    return { ...row, estimated_cost_usd: Number(row.estimated_cost_usd).toFixed(4) };
+  }
+
+  private toReturnedApiUsageEventRow(row: SupabaseApiUsageEventRow): SupabaseApiUsageEventRow {
+    if (!this.parent.returnEstimatedCostsAsStrings) {
+      return row;
+    }
+
+    return { ...row, estimated_cost_usd: Number(row.estimated_cost_usd).toFixed(4) };
   }
 }

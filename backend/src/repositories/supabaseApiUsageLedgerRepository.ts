@@ -5,6 +5,8 @@ import type {
   StartBackupRunInput,
 } from "../services/apiUsageLedger.js";
 
+type SupabaseNumeric = number | string;
+
 export interface SupabaseBackupRunRow {
   id: string;
   x_account_id: string;
@@ -15,7 +17,7 @@ export interface SupabaseBackupRunRow {
   tweets_captured: number;
   profiles_captured: number;
   api_units_used: number;
-  estimated_cost_usd: number;
+  estimated_cost_usd: SupabaseNumeric;
   rate_limit_remaining?: number;
   rate_limit_reset_at?: string;
   error_code?: string;
@@ -33,7 +35,7 @@ export interface SupabaseApiUsageEventRow {
   resource_type: ApiUsageEvent["resourceType"];
   resource_count: number;
   owned_read: boolean;
-  estimated_cost_usd: number;
+  estimated_cost_usd: SupabaseNumeric;
   rate_limit_limit?: number;
   rate_limit_remaining?: number;
   rate_limit_reset_at?: string;
@@ -165,7 +167,7 @@ function toBackupRun(row: SupabaseBackupRunRow): BackupRun {
     tweetsCaptured: row.tweets_captured,
     profilesCaptured: row.profiles_captured,
     apiUnitsUsed: row.api_units_used,
-    estimatedCostUsd: row.estimated_cost_usd,
+    estimatedCostUsd: Number(row.estimated_cost_usd),
     rateLimitRemaining: row.rate_limit_remaining,
     rateLimitResetAt: row.rate_limit_reset_at,
     errorCode: row.error_code,
@@ -185,7 +187,7 @@ function toApiUsageEvent(row: SupabaseApiUsageEventRow): ApiUsageEvent {
     resourceType: row.resource_type,
     resourceCount: row.resource_count,
     ownedRead: row.owned_read,
-    estimatedCostUsd: row.estimated_cost_usd,
+    estimatedCostUsd: Number(row.estimated_cost_usd),
     rateLimitLimit: row.rate_limit_limit,
     rateLimitRemaining: row.rate_limit_remaining,
     rateLimitResetAt: row.rate_limit_reset_at,

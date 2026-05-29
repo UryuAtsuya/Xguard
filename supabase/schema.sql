@@ -302,8 +302,44 @@ begin
     where user_profiles.id = p_user_id
     for update;
 
-  if monthly_limit is null then
+  if not found then
     raise exception 'api_usage_ledger_user_profile_not_found:%', p_user_id using errcode = 'P0001';
+  end if;
+
+  if p_x_account_id is not null and not exists (
+    select 1
+    from public.x_accounts
+    where x_accounts.id = p_x_account_id
+      and x_accounts.user_id = p_user_id
+  ) then
+    raise exception 'api_usage_ledger_x_account_not_found:%', p_x_account_id using errcode = 'P0001';
+  end if;
+
+  if p_backup_run_id is not null and not exists (
+    select 1
+    from public.backup_runs
+    join public.x_accounts on x_accounts.id = backup_runs.x_account_id
+    where backup_runs.id = p_backup_run_id
+      and x_accounts.user_id = p_user_id
+      and (p_x_account_id is null or backup_runs.x_account_id = p_x_account_id)
+  ) then
+    raise exception 'api_usage_ledger_backup_run_not_found:%', p_backup_run_id using errcode = 'P0001';
+  end if;
+
+  if p_resource_count < 0 then
+    raise exception 'api_usage_ledger_invalid_non_negative_integer:resourceCount' using errcode = 'P0001';
+  end if;
+
+  if p_rate_limit_limit is not null and p_rate_limit_limit < 0 then
+    raise exception 'api_usage_ledger_invalid_non_negative_integer:rateLimitLimit' using errcode = 'P0001';
+  end if;
+
+  if p_rate_limit_remaining is not null and p_rate_limit_remaining < 0 then
+    raise exception 'api_usage_ledger_invalid_non_negative_integer:rateLimitRemaining' using errcode = 'P0001';
+  end if;
+
+  if p_estimated_cost_usd < 0 then
+    raise exception 'api_usage_ledger_invalid_non_negative_cost:estimatedCostUsd' using errcode = 'P0001';
   end if;
 
   select coalesce(sum(api_usage_events.estimated_cost_usd), 0)
@@ -355,7 +391,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.record_api_usage_event_with_monthly_limit(
+revoke all on function public.record_api_usage_event_with_monthly_limit(
   uuid,
   uuid,
   uuid,
@@ -372,3 +408,21 @@ revoke execute on function public.record_api_usage_event_with_monthly_limit(
   integer,
   timestamptz
 ) from public, anon, authenticated;
+
+grant execute on function public.record_api_usage_event_with_monthly_limit(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  integer,
+  boolean,
+  numeric,
+  integer,
+  integer,
+  timestamptz,
+  integer,
+  timestamptz
+) to service_role;
