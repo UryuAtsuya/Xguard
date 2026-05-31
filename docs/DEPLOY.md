@@ -30,6 +30,8 @@ APP_BASE_URL=
 
 現在の prototype では、`X_CLIENT_ID` が mock OAuth metadata から configured OAuth metadata へ切り替える switch である。`X_CALLBACK_URL` は直接設定でき、未設定の場合は `${APP_BASE_URL}/api/x/oauth/callback` または local port `4000` に fallback する。`X_CLIENT_SECRET` は検出するがまだ exchange しないため、callback handling は repository references の保存に留める。
 
+prototype の設定確認は `GET /api/x/oauth/status` を使う。この endpoint は `mode`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` だけを返し、`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material は返さない。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、write/follow/DM scopes は追加しない。本番で公開継続する場合は admin 認証または deployment health check 側へ寄せる。
+
 ## Build And Start
 
 ```bash

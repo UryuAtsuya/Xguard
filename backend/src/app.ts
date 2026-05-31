@@ -10,6 +10,28 @@ import { MockBackupService } from "./services/mockBackupService.js";
 
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
+export interface OAuthStatusResponse {
+  mode: RuntimeConfig["xOAuth"]["mode"];
+  callbackUrl: string;
+  scopes: string[];
+  clientIdConfigured: boolean;
+  clientSecretConfigured: boolean;
+  writesEnabled: false;
+  missingEnv: string[];
+}
+
+export function buildOAuthStatusResponse(config: RuntimeConfig = createRuntimeConfig()): OAuthStatusResponse {
+  return {
+    mode: config.xOAuth.mode,
+    callbackUrl: config.xOAuth.callbackUrl,
+    scopes: [...V0_READ_ONLY_OAUTH_SCOPES],
+    clientIdConfigured: config.xOAuth.mode === "configured",
+    clientSecretConfigured: config.xOAuth.clientSecretConfigured,
+    writesEnabled: false,
+    missingEnv: config.xOAuth.mode === "mock" ? [...config.xOAuth.missingEnv] : [],
+  };
+}
+
 export function buildOAuthStartResponse(config: RuntimeConfig = createRuntimeConfig()) {
   const params = new URLSearchParams({
     response_type: "code",
@@ -55,6 +77,10 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
 
   app.get("/api/x/oauth/start", (_request, response) => {
     response.json(buildOAuthStartResponse(config));
+  });
+
+  app.get("/api/x/oauth/status", (_request, response) => {
+    response.json(buildOAuthStatusResponse(config));
   });
 
   app.get("/api/x/oauth/callback", async (request, response) => {
