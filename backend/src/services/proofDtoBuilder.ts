@@ -7,12 +7,13 @@ export interface ProofDtoInput {
 }
 
 export function buildProofPublicPayload(input: ProofDtoInput): ProofPublicPayload {
-  const sortedTweets = [...input.tweetSnapshots].sort((a, b) => b.postedAt.localeCompare(a.postedAt));
+  const publicTweetSnapshots = input.tweetSnapshots.filter(isPubliclySafeTweetSnapshot);
+  const sortedTweets = [...publicTweetSnapshots].sort((a, b) => b.postedAt.localeCompare(a.postedAt));
   const sortedProfiles = [...input.profileSnapshots].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
   const latestProfile = sortedProfiles[0];
-  const oldestSnapshotDate = [...input.profileSnapshots.map((item) => item.capturedAt), ...input.tweetSnapshots.map((item) => item.capturedAt)]
+  const oldestSnapshotDate = [...input.profileSnapshots.map((item) => item.capturedAt), ...publicTweetSnapshots.map((item) => item.capturedAt)]
     .sort()[0];
-  const newestSnapshotDate = [...input.profileSnapshots.map((item) => item.capturedAt), ...input.tweetSnapshots.map((item) => item.capturedAt)]
+  const newestSnapshotDate = [...input.profileSnapshots.map((item) => item.capturedAt), ...publicTweetSnapshots.map((item) => item.capturedAt)]
     .sort()
     .at(-1);
 
@@ -26,7 +27,7 @@ export function buildProofPublicPayload(input: ProofDtoInput): ProofPublicPayloa
     backedUpFrom: oldestSnapshotDate ?? new Date().toISOString(),
     backedUpUntil: newestSnapshotDate ?? new Date().toISOString(),
     snapshotCounts: {
-      tweets: input.tweetSnapshots.length,
+      tweets: publicTweetSnapshots.length,
       profileSnapshots: input.profileSnapshots.length,
     },
     publicMetrics: latestProfile
@@ -50,4 +51,8 @@ export function buildProofPublicPayload(input: ProofDtoInput): ProofPublicPayloa
     })),
     redactionPolicyVersion: "v1",
   };
+}
+
+function isPubliclySafeTweetSnapshot(tweet: TweetSnapshot): boolean {
+  return !tweet.deletedAt && !tweet.withheldAt && !tweet.protectedAt;
 }
