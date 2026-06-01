@@ -340,8 +340,12 @@ function runPsql(sql: string, options: { expectFailure?: boolean } = {}): { stdo
 
   const result = spawnSync(
     process.env.PSQL_BIN ?? "psql",
-    ["--no-psqlrc", "--quiet", "--no-align", "--tuples-only", "--set=ON_ERROR_STOP=1", databaseUrl],
+    ["--no-psqlrc", "--quiet", "--no-align", "--tuples-only", "--set=ON_ERROR_STOP=1"],
     {
+      env: {
+        ...process.env,
+        PGDATABASE: databaseUrl,
+      },
       input: sql,
       encoding: "utf8",
     },

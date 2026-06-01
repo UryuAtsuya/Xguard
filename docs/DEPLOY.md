@@ -47,6 +47,7 @@ node dist/backend/src/server.js
 - `git diff --check`
 - `npm run build`
 - `npm run check`
+- 実Supabase/Postgres migration test: `RUN_SUPABASE_SQL_INTEGRATION_TESTS=1 SUPABASE_DB_URL='postgresql://...' npx vitest run --configLoader runner backend/src/__tests__/supabaseSqlApiUsageLedger.integration.test.ts`
 - `npx vitest run --configLoader runner`
 - X OAuth scopes が `tweet.read`、`users.read`、`offline.access` として confirmed
 - Developer Console prices と spending limits を operations notes に転記済み
@@ -65,3 +66,4 @@ node dist/backend/src/server.js
 - Backup workers は `monthly_api_cost_limit_usd` を超える場合に stop し、無限 retry ではなく `rate_limited` または `failed` status を surface する。
 - production `SupabaseApiUsageLedgerStore` は `backup_runs` と `api_usage_events` の changes を database transaction 内で実行し、insert 前の monthly cost-limit guard を維持する必要がある。
 - production pricing を final として扱う前に、Developer Console pricing、spending limit、Usage API availability を `docs/API_COST_MODEL.md` に転記する必要がある。
+- `SUPABASE_DB_URL` / `POSTGRES_URL` は実DB migration test 専用で、backend/frontend runtime env として常設しない。test output、docs、commit message に接続文字列や service-role credential を残さない。
