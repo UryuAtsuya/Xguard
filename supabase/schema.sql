@@ -315,13 +315,17 @@ begin
     raise exception 'api_usage_ledger_x_account_not_found:%', p_x_account_id using errcode = 'P0001';
   end if;
 
+  if p_backup_run_id is not null and p_x_account_id is null then
+    raise exception 'api_usage_ledger_x_account_required_for_backup_run' using errcode = 'P0001';
+  end if;
+
   if p_backup_run_id is not null and not exists (
     select 1
     from public.backup_runs
     join public.x_accounts on x_accounts.id = backup_runs.x_account_id
     where backup_runs.id = p_backup_run_id
       and x_accounts.user_id = p_user_id
-      and (p_x_account_id is null or backup_runs.x_account_id = p_x_account_id)
+      and backup_runs.x_account_id = p_x_account_id
   ) then
     raise exception 'api_usage_ledger_backup_run_not_found:%', p_backup_run_id using errcode = 'P0001';
   end if;

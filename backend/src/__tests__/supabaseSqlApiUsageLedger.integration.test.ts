@@ -147,6 +147,34 @@ describeIfIntegration("Supabase SQL API usage ledger migration", () => {
       do $$
       begin
         perform public.record_api_usage_event_with_monthly_limit(
+          '${ids.nullAccountBackupEventId}'::uuid,
+          '${ids.userId}'::uuid,
+          null,
+          '${ids.backupRunId}'::uuid,
+          'GET /2/users/:id/tweets',
+          'GET',
+          'post',
+          1,
+          true,
+          0.0000,
+          null,
+          null,
+          null,
+          200,
+          now()
+        );
+
+        raise exception 'expected x_account_id requirement for backup_run rejection';
+      exception
+        when sqlstate 'P0001' then
+          if sqlerrm <> 'api_usage_ledger_x_account_required_for_backup_run' then
+            raise;
+          end if;
+      end $$;
+
+      do $$
+      begin
+        perform public.record_api_usage_event_with_monthly_limit(
           '${ids.missingBackupEventId}'::uuid,
           '${ids.userId}'::uuid,
           '${ids.xAccountId}'::uuid,
@@ -382,6 +410,7 @@ function createFixtureIds(): Record<string, string> & { suffix: string; shortSuf
     missingBackupRunId: randomUUID(),
     successEventId: randomUUID(),
     wrongAccountEventId: randomUUID(),
+    nullAccountBackupEventId: randomUUID(),
     missingBackupEventId: randomUUID(),
     otherBackupEventId: randomUUID(),
     mismatchedAccountEventId: randomUUID(),
