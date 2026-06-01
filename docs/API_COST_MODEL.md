@@ -80,3 +80,17 @@ Supabase schema の `public.record_api_usage_event_with_monthly_limit` は、pro
 この function は optional な `x_account_id` と `backup_run_id` が同じ user と同じ X account に属することを検証し、negative metering values を拒否する。`security definer` だが execute は `service_role` のみに grant し、`public`、`anon`、`authenticated` からは revoke する。
 
 Repository row mapping は Supabase `numeric` の `estimated_cost_usd` が string で返る場合も `Number(...)` で domain DTO の number に揃える。これにより backup-run rollup と API usage event の型境界を維持する。
+
+## 2026-06-01 実Postgres検証の足場
+
+`backend/src/__tests__/supabaseSqlApiUsageLedger.integration.test.ts` は、実Supabase/Postgres migration後に `record_api_usage_event_with_monthly_limit` をSQLレベルで検証するためのskip-by-defaultテストである。通常の `npm run check` では実行せず、DB接続先を明示した環境だけで実行する。
+
+実行条件:
+
+- `RUN_SUPABASE_SQL_INTEGRATION_TESTS=1`
+- `SUPABASE_DB_URL` または `POSTGRES_URL`
+- `psql` が実行できること。必要なら `PSQL_BIN` でパスを指定する。
+- 対象DBに `supabase/schema.sql` 相当のmigrationが適用済みで、`service_role` / `authenticated` roles が存在すること。
+- 接続roleが test fixture 用の `auth.users` / `user_profiles` / `x_accounts` / `backup_runs` seed と `SET ROLE` を実行できること。
+
+このintegration testは1 transaction内でfixtureを作成し、最後に `rollback` する。検証観点は `service_role` 実行、`authenticated` 拒否、`x_account_id` ownership、`backup_run_id` ownership、同一X account整合性、存在しない `backup_run_id`、negative metering values、monthly cost limit超過である。DB URLやsecret値はtest failure messageに出さない。
