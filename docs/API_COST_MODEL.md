@@ -77,7 +77,7 @@ schema には `record_api_usage_event_with_monthly_limit` も含まれる。こ�
 
 Supabase schema の `public.record_api_usage_event_with_monthly_limit` は、production insert boundary として、`user_profiles` を `for update` で lock し、current calendar month の `api_usage_events.estimated_cost_usd` を合算してから insert 可否を判断する。
 
-この function は optional な `x_account_id` と `backup_run_id` が同じ user と同じ X account に属することを検証し、negative metering values を拒否する。`security definer` だが execute は `service_role` のみに grant し、`public`、`anon`、`authenticated` からは revoke する。
+この function は optional な `x_account_id` と `backup_run_id` が同じ user と同じ X account に属することを検証し、`backup_run_id` 付き usage event では `x_account_id` を必須にする。negative metering values も拒否する。`security definer` だが execute は `service_role` のみに grant し、`public`、`anon`、`authenticated` からは revoke する。
 
 Repository row mapping は Supabase `numeric` の `estimated_cost_usd` が string で返る場合も `Number(...)` で domain DTO の number に揃える。これにより backup-run rollup と API usage event の型境界を維持する。
 
