@@ -126,9 +126,8 @@ describe("XGuard API prototype", () => {
     expect(startResponse).not.toHaveProperty("clientSecretConfigured");
   });
 
-  it("disables OAuth status by default in production", async () => {
+  it("disables OAuth status by default when exposure is not explicit", async () => {
     const config = createRuntimeConfig({
-      NODE_ENV: "production",
       PORT: "4000",
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
@@ -146,6 +145,23 @@ describe("XGuard API prototype", () => {
     expect(JSON.stringify(statusResponse.body)).not.toContain("real-client-id");
     expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
     expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
+  });
+
+  it("keeps OAuth status disabled when non-production explicitly opts out", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "test",
+      PORT: "4000",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_OAUTH_STATUS_EXPOSURE: "disabled",
+    });
+
+    const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
+    const statusResponse = createRouteResponseRecorder();
+    statusRoute.stack[0].handle({}, statusResponse);
+
+    expect(statusResponse.statusCode).toBe(404);
+    expect(statusResponse.body).toEqual({ error: "oauth_status_not_found" });
   });
 
   it("enables OAuth status in production only when deployment diagnostic exposure is explicit", async () => {
@@ -178,6 +194,14 @@ describe("XGuard API prototype", () => {
     expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
     expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(statusResponse.body)).not.toContain("token");
+  });
+
+  it("rejects unsupported OAuth status exposure values", async () => {
+    expect(() =>
+      createRuntimeConfig({
+        X_OAUTH_STATUS_EXPOSURE: "public",
+      }),
+    ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_EXPOSURE");
   });
 
   it("builds the fallback callback URL without a doubled slash", async () => {

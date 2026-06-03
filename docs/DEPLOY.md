@@ -31,7 +31,7 @@ APP_BASE_URL=
 
 現在の prototype では、`X_CLIENT_ID` が mock OAuth metadata から configured OAuth metadata へ切り替える switch である。`X_CALLBACK_URL` は直接設定でき、未設定の場合は `${APP_BASE_URL}/api/x/oauth/callback` または local port `4000` に fallback する。`X_CLIENT_SECRET` は検出するがまだ exchange しないため、callback handling は repository references の保存に留める。
 
-deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。`X_OAUTH_STATUS_EXPOSURE` は `disabled` または `deployment_diagnostic` を指定できる。未設定の場合、`NODE_ENV=production` では `disabled`、development/test 相当では `deployment_diagnostic` として扱う。本番でこの endpoint を使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示し、不要になったら `disabled` に戻す。
+deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。`X_OAUTH_STATUS_EXPOSURE` は `disabled` または `deployment_diagnostic` を指定できる。未設定の場合は環境名に関係なく `disabled` として扱う。この endpoint を使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示し、不要になったら `disabled` に戻す。
 
 有効時の endpoint は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` だけを返し、`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material は返さない。無効時は 404 JSON を返す。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、write/follow/DM scopes は追加しない。
 

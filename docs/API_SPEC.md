@@ -20,7 +20,7 @@
 
 ## OAuth Status
 
-`GET /api/x/oauth/status` は deployment diagnostic 用の read-only endpoint である。`X_OAUTH_STATUS_EXPOSURE` が未設定の場合、`NODE_ENV=production` では無効化され、404 JSON を返す。development/test 相当では既定で `deployment_diagnostic` として有効になる。本番で使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示する。
+`GET /api/x/oauth/status` は deployment diagnostic 用の read-only endpoint である。`X_OAUTH_STATUS_EXPOSURE` が未設定の場合は環境名に関係なく無効化され、404 JSON を返す。診断で使う場合だけ `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示する。
 
 有効時の response fields は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` に固定する。`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material、write/follow/DM scopes は返さない。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで維持する。
 

@@ -63,7 +63,7 @@ function parseOAuthStatusExposure(value: string | undefined, nodeEnv: string | u
   const trimmed = value?.trim();
 
   if (!trimmed) {
-    return nodeEnv === "production" ? "disabled" : "deployment_diagnostic";
+    return "disabled";
   }
 
   if (trimmed === "disabled" || trimmed === "deployment_diagnostic") {
