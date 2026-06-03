@@ -11,6 +11,7 @@ import { MockBackupService } from "./services/mockBackupService.js";
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
 export interface OAuthStatusResponse {
+  exposure: RuntimeConfig["oauthStatusExposure"];
   mode: RuntimeConfig["xOAuth"]["mode"];
   callbackUrl: string;
   scopes: string[];
@@ -22,6 +23,7 @@ export interface OAuthStatusResponse {
 
 export function buildOAuthStatusResponse(config: RuntimeConfig = createRuntimeConfig()): OAuthStatusResponse {
   return {
+    exposure: config.oauthStatusExposure,
     mode: config.xOAuth.mode,
     callbackUrl: config.xOAuth.callbackUrl,
     scopes: [...V0_READ_ONLY_OAUTH_SCOPES],
@@ -80,6 +82,11 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   });
 
   app.get("/api/x/oauth/status", (_request, response) => {
+    if (config.oauthStatusExposure === "disabled") {
+      response.status(404).json({ error: "oauth_status_not_found" });
+      return;
+    }
+
     response.json(buildOAuthStatusResponse(config));
   });
 

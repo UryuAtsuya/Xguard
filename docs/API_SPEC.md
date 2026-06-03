@@ -12,7 +12,7 @@
 |---|---|---|---|
 | GET | `/health` | API health check | なし |
 | GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata を返す | なし |
-| GET | `/api/x/oauth/status` | prototype diagnostic として OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | なし |
+| GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化された場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | なし |
 | GET | `/api/x/oauth/callback` | callback shape を検証し、repository interface に token references を保存する | なし |
 | POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する | なし |
 | GET | `/api/backup/status/:runId` | mock backup status を読む | なし |
@@ -20,7 +20,9 @@
 
 ## OAuth Status
 
-`GET /api/x/oauth/status` は prototype diagnostic 用の read-only endpoint で、response fields は `mode`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` に固定する。`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material、write/follow/DM scopes は返さない。本番で公開継続する場合は admin 認証または deployment health check 側へ寄せる。
+`GET /api/x/oauth/status` は deployment diagnostic 用の read-only endpoint である。`X_OAUTH_STATUS_EXPOSURE` が未設定の場合、`NODE_ENV=production` では無効化され、404 JSON を返す。development/test 相当では既定で `deployment_diagnostic` として有効になる。本番で使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示する。
+
+有効時の response fields は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` に固定する。`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material、write/follow/DM scopes は返さない。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで維持する。
 
 ## 置き換え予定の Backend Interfaces
 

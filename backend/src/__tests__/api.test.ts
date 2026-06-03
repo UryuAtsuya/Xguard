@@ -10,6 +10,7 @@ describe("XGuard API prototype", () => {
     "callbackUrl",
     "clientIdConfigured",
     "clientSecretConfigured",
+    "exposure",
     "missingEnv",
     "mode",
     "scopes",
@@ -44,6 +45,7 @@ describe("XGuard API prototype", () => {
         callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
         clientSecretConfigured: true,
       },
+      oauthStatusExposure: "deployment_diagnostic",
     });
     const authorizationUrl = new URL(response.authorizationUrl);
 
@@ -60,12 +62,14 @@ describe("XGuard API prototype", () => {
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
       X_CALLBACK_URL: "https://xguard.example.com/api/x/oauth/callback",
+      X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
     });
 
     const response = buildOAuthStatusResponse(config);
 
     expect(response).toEqual({
       mode: "configured",
+      exposure: "deployment_diagnostic",
       callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
       scopes: ["tweet.read", "users.read", "offline.access"],
       clientIdConfigured: true,
@@ -91,15 +95,18 @@ describe("XGuard API prototype", () => {
         callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
         clientSecretConfigured: true,
       },
+      oauthStatusExposure: "deployment_diagnostic" as const,
     };
 
     const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
-    let statusBody: unknown;
-    statusRoute.stack[0].handle({}, { json: (body: unknown) => (statusBody = body) });
+    const statusResponse = createRouteResponseRecorder();
+    statusRoute.stack[0].handle({}, statusResponse);
     const startResponse = buildOAuthStartResponse(config);
 
-    expect(statusBody).toEqual({
+    expect(statusResponse.statusCode).toBeUndefined();
+    expect(statusResponse.body).toEqual({
       mode: "configured",
+      exposure: "deployment_diagnostic",
       callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
       scopes: ["tweet.read", "users.read", "offline.access"],
       clientIdConfigured: true,
@@ -107,16 +114,70 @@ describe("XGuard API prototype", () => {
       writesEnabled: false,
       missingEnv: [],
     });
-    expect(Object.keys(statusBody as Record<string, unknown>).sort()).toEqual(oauthStatusKeys);
-    expect(statusBody).not.toHaveProperty("authorizationUrl");
-    expect(JSON.stringify(statusBody)).not.toContain("real-client-id");
-    expect(JSON.stringify(statusBody)).not.toContain("super-secret-value");
-    expect(JSON.stringify(statusBody)).not.toContain("vault://");
+    expect(Object.keys(statusResponse.body as Record<string, unknown>).sort()).toEqual(oauthStatusKeys);
+    expect(statusResponse.body).not.toHaveProperty("authorizationUrl");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("real-client-id");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
     for (const scope of disallowedOAuthScopes) {
-      expect(JSON.stringify(statusBody)).not.toContain(scope);
+      expect(JSON.stringify(statusResponse.body)).not.toContain(scope);
     }
     expect(startResponse.authorizationUrl).toContain("client_id=real-client-id");
     expect(startResponse).not.toHaveProperty("clientSecretConfigured");
+  });
+
+  it("disables OAuth status by default in production", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      PORT: "4000",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    });
+
+    expect(config.oauthStatusExposure).toBe("disabled");
+
+    const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
+    const statusResponse = createRouteResponseRecorder();
+    statusRoute.stack[0].handle({}, statusResponse);
+
+    expect(statusResponse.statusCode).toBe(404);
+    expect(statusResponse.body).toEqual({ error: "oauth_status_not_found" });
+    expect(JSON.stringify(statusResponse.body)).not.toContain("real-client-id");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
+  });
+
+  it("enables OAuth status in production only when deployment diagnostic exposure is explicit", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      PORT: "4000",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+      X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+    });
+
+    const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
+    const statusResponse = createRouteResponseRecorder();
+    statusRoute.stack[0].handle({}, statusResponse);
+
+    expect(statusResponse.statusCode).toBeUndefined();
+    expect(statusResponse.body).toEqual({
+      mode: "configured",
+      exposure: "deployment_diagnostic",
+      callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
+      scopes: ["tweet.read", "users.read", "offline.access"],
+      clientIdConfigured: true,
+      clientSecretConfigured: true,
+      writesEnabled: false,
+      missingEnv: [],
+    });
+    expect(Object.keys(statusResponse.body as Record<string, unknown>).sort()).toEqual(oauthStatusKeys);
+    expect(JSON.stringify(statusResponse.body)).not.toContain("real-client-id");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("token");
   });
 
   it("builds the fallback callback URL without a doubled slash", async () => {
@@ -158,4 +219,27 @@ function findRegisteredGetRoute(
   }
 
   return route;
+}
+
+type RouteResponseRecorder = {
+  statusCode: number | undefined;
+  body: unknown;
+  status: (statusCode: number) => RouteResponseRecorder;
+  json: (body: unknown) => void;
+};
+
+function createRouteResponseRecorder(): RouteResponseRecorder {
+  const response = {
+    statusCode: undefined as number | undefined,
+    body: undefined as unknown,
+    status(statusCode: number) {
+      this.statusCode = statusCode;
+      return this;
+    },
+    json(body: unknown) {
+      this.body = body;
+    },
+  };
+
+  return response;
 }

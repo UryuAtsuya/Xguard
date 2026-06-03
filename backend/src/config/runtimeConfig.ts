@@ -2,7 +2,10 @@ export interface RuntimeConfig {
   port: number;
   appBaseUrl?: string;
   xOAuth: XOAuthRuntimeConfig;
+  oauthStatusExposure: OAuthStatusExposure;
 }
+
+export type OAuthStatusExposure = "disabled" | "deployment_diagnostic";
 
 export type XOAuthRuntimeConfig =
   | {
@@ -26,11 +29,13 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const callbackUrl = parseOptionalUrl("X_CALLBACK_URL", env.X_CALLBACK_URL) ?? fallbackCallbackUrl;
   const clientId = env.X_CLIENT_ID?.trim();
   const clientSecret = env.X_CLIENT_SECRET?.trim();
+  const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE, env.NODE_ENV);
 
   if (!clientId) {
     return {
       port,
       appBaseUrl,
+      oauthStatusExposure,
       xOAuth: {
         mode: "mock",
         clientId: "mock",
@@ -44,6 +49,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   return {
     port,
     appBaseUrl,
+    oauthStatusExposure,
     xOAuth: {
       mode: "configured",
       clientId,
@@ -51,6 +57,20 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       clientSecretConfigured: Boolean(clientSecret),
     },
   };
+}
+
+function parseOAuthStatusExposure(value: string | undefined, nodeEnv: string | undefined): OAuthStatusExposure {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return nodeEnv === "production" ? "disabled" : "deployment_diagnostic";
+  }
+
+  if (trimmed === "disabled" || trimmed === "deployment_diagnostic") {
+    return trimmed;
+  }
+
+  throw new Error("invalid_runtime_env:X_OAUTH_STATUS_EXPOSURE");
 }
 
 function parsePort(value: string | undefined): number {
