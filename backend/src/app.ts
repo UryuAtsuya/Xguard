@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express from "express";
 import { z } from "zod";
 import { MockXApiClient } from "./clients/xApiClient.js";
@@ -57,6 +57,20 @@ export function buildOAuthStartResponse(config: RuntimeConfig = createRuntimeCon
 
 export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
+export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
+  if (!config.corsAllowedOrigins) {
+    return {};
+  }
+
+  const allowedOrigins = new Set(config.corsAllowedOrigins);
+
+  return {
+    origin(origin, callback) {
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
+  };
+}
+
 export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
@@ -64,7 +78,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, Awaited<ReturnType<MockBackupService["runBackup"]>>>();
 
-  app.use(cors());
+  app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
 
   app.get("/health", (_request, response) => {

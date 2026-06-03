@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildOAuthStartResponse, buildMockOAuthStartResponse, buildOAuthStatusResponse, createApp } from "../app.js";
+import {
+  buildCorsOptions,
+  buildOAuthStartResponse,
+  buildMockOAuthStartResponse,
+  buildOAuthStatusResponse,
+  createApp,
+} from "../app.js";
 import { MockXApiClient } from "../clients/xApiClient.js";
 import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "../fixtures/mockXData.js";
@@ -37,8 +43,10 @@ describe("XGuard API prototype", () => {
 
   it("uses configured X OAuth env values when they are available", async () => {
     const response = buildOAuthStartResponse({
+      nodeEnv: "test",
       port: 4000,
       appBaseUrl: "http://localhost:4000",
+      corsAllowedOrigins: undefined,
       xOAuth: {
         mode: "configured",
         clientId: "real-client-id",
@@ -87,8 +95,10 @@ describe("XGuard API prototype", () => {
 
   it("serves OAuth status over GET without changing the OAuth start response", async () => {
     const config = {
+      nodeEnv: "test",
       port: 4000,
       appBaseUrl: "https://xguard.example.com",
+      corsAllowedOrigins: undefined,
       xOAuth: {
         mode: "configured" as const,
         clientId: "real-client-id",
@@ -204,6 +214,33 @@ describe("XGuard API prototype", () => {
     ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_EXPOSURE");
   });
 
+  it("limits CORS to configured origins in production", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      APP_BASE_URL: "https://app.xguard.example.com/app",
+    });
+    const corsOptions = buildCorsOptions(config);
+    const allowed = await evaluateCorsOrigin(corsOptions.origin, "https://app.xguard.example.com");
+    const sameOriginOrServer = await evaluateCorsOrigin(corsOptions.origin, undefined);
+    const rejected = await evaluateCorsOrigin(corsOptions.origin, "https://evil.example.com");
+
+    expect(config.corsAllowedOrigins).toEqual(["https://app.xguard.example.com"]);
+    expect(allowed).toBe(true);
+    expect(sameOriginOrServer).toBe(true);
+    expect(rejected).toBe(false);
+  });
+
+  it("accepts comma-separated CORS origins", async () => {
+    const config = createRuntimeConfig({
+      CORS_ORIGINS: "https://app.xguard.example.com, https://admin.xguard.example.com/path",
+    });
+    const corsOptions = buildCorsOptions(config);
+
+    expect(config.corsAllowedOrigins).toEqual(["https://app.xguard.example.com", "https://admin.xguard.example.com"]);
+    expect(await evaluateCorsOrigin(corsOptions.origin, "https://admin.xguard.example.com")).toBe(true);
+    expect(await evaluateCorsOrigin(corsOptions.origin, "https://other.example.com")).toBe(false);
+  });
+
   it("builds the fallback callback URL without a doubled slash", async () => {
     const config = createRuntimeConfig({
       PORT: "4000",
@@ -266,4 +303,24 @@ function createRouteResponseRecorder(): RouteResponseRecorder {
   };
 
   return response;
+}
+
+async function evaluateCorsOrigin(
+  originOption: ReturnType<typeof buildCorsOptions>["origin"],
+  requestOrigin: string | undefined,
+): Promise<unknown> {
+  if (typeof originOption !== "function") {
+    return originOption;
+  }
+
+  return await new Promise((resolve, reject) => {
+    originOption(requestOrigin, (error, allow) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(allow);
+    });
+  });
 }

@@ -1,6 +1,8 @@
 export interface RuntimeConfig {
+  nodeEnv: string;
   port: number;
   appBaseUrl?: string;
+  corsAllowedOrigins?: string[];
   xOAuth: XOAuthRuntimeConfig;
   oauthStatusExposure: OAuthStatusExposure;
 }
@@ -23,18 +25,22 @@ export type XOAuthRuntimeConfig =
     };
 
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
+  const nodeEnv = env.NODE_ENV?.trim() || "development";
   const port = parsePort(env.PORT);
   const appBaseUrl = parseOptionalUrl("APP_BASE_URL", env.APP_BASE_URL);
+  const corsAllowedOrigins = parseCorsAllowedOrigins(env.CORS_ORIGINS, appBaseUrl, nodeEnv);
   const fallbackCallbackUrl = joinUrlPath(appBaseUrl ?? `http://localhost:${port}`, "/api/x/oauth/callback");
   const callbackUrl = parseOptionalUrl("X_CALLBACK_URL", env.X_CALLBACK_URL) ?? fallbackCallbackUrl;
   const clientId = env.X_CLIENT_ID?.trim();
   const clientSecret = env.X_CLIENT_SECRET?.trim();
-  const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE, env.NODE_ENV);
+  const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE);
 
   if (!clientId) {
     return {
+      nodeEnv,
       port,
       appBaseUrl,
+      corsAllowedOrigins,
       oauthStatusExposure,
       xOAuth: {
         mode: "mock",
@@ -47,8 +53,10 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   }
 
   return {
+    nodeEnv,
     port,
     appBaseUrl,
+    corsAllowedOrigins,
     oauthStatusExposure,
     xOAuth: {
       mode: "configured",
@@ -59,7 +67,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   };
 }
 
-function parseOAuthStatusExposure(value: string | undefined, nodeEnv: string | undefined): OAuthStatusExposure {
+function parseOAuthStatusExposure(value: string | undefined): OAuthStatusExposure {
   const trimmed = value?.trim();
 
   if (!trimmed) {
@@ -71,6 +79,27 @@ function parseOAuthStatusExposure(value: string | undefined, nodeEnv: string | u
   }
 
   throw new Error("invalid_runtime_env:X_OAUTH_STATUS_EXPOSURE");
+}
+
+function parseCorsAllowedOrigins(
+  value: string | undefined,
+  appBaseUrl: string | undefined,
+  nodeEnv: string,
+): string[] | undefined {
+  const explicitOrigins = value
+    ?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (explicitOrigins?.length) {
+    return explicitOrigins.map((origin) => parseUrlOrigin("CORS_ORIGINS", origin));
+  }
+
+  if (nodeEnv === "production") {
+    return appBaseUrl ? [parseUrlOrigin("APP_BASE_URL", appBaseUrl)] : [];
+  }
+
+  return undefined;
 }
 
 function parsePort(value: string | undefined): number {
@@ -96,6 +125,14 @@ function parseOptionalUrl(fieldName: string, value: string | undefined): string 
 
   try {
     return new URL(trimmed).toString();
+  } catch {
+    throw new Error(`invalid_runtime_env:${fieldName}`);
+  }
+}
+
+function parseUrlOrigin(fieldName: string, value: string): string {
+  try {
+    return new URL(value).origin;
   } catch {
     throw new Error(`invalid_runtime_env:${fieldName}`);
   }

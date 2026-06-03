@@ -22,6 +22,7 @@ X_CLIENT_ID=
 X_CLIENT_SECRET=
 X_CALLBACK_URL=
 X_OAUTH_STATUS_EXPOSURE=disabled
+CORS_ORIGINS=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 APP_BASE_URL=
@@ -34,6 +35,8 @@ APP_BASE_URL=
 deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。`X_OAUTH_STATUS_EXPOSURE` は `disabled` または `deployment_diagnostic` を指定できる。未設定の場合は環境名に関係なく `disabled` として扱う。この endpoint を使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示し、不要になったら `disabled` に戻す。
 
 有効時の endpoint は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` だけを返し、`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material は返さない。無効時は 404 JSON を返す。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、write/follow/DM scopes は追加しない。
+
+`CORS_ORIGINS` は browser からAPIへアクセスできる origin のallowlistで、複数指定する場合はcomma区切りにする。未設定かつ `NODE_ENV=production` の場合は `APP_BASE_URL` の origin だけを許可し、`APP_BASE_URL` も未設定ならcross-origin requestを許可しない。local/prototype環境では未設定時に既定の `cors` 挙動を維持する。
 
 ## Build And Start
 
