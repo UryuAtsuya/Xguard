@@ -22,6 +22,7 @@ X_CLIENT_ID=
 X_CLIENT_SECRET=
 X_CALLBACK_URL=
 X_OAUTH_STATUS_EXPOSURE=disabled
+X_OAUTH_STATUS_DIAGNOSTIC_TOKEN=
 CORS_ORIGINS=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
@@ -32,9 +33,9 @@ APP_BASE_URL=
 
 現在の prototype では、`X_CLIENT_ID` が mock OAuth metadata から configured OAuth metadata へ切り替える switch である。`X_CALLBACK_URL` は直接設定でき、未設定の場合は `${APP_BASE_URL}/api/x/oauth/callback` または local port `4000` に fallback する。`X_CLIENT_SECRET` は検出するがまだ exchange しないため、callback handling は repository references の保存に留める。
 
-deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。`X_OAUTH_STATUS_EXPOSURE` は `disabled` または `deployment_diagnostic` を指定できる。未設定の場合は環境名に関係なく `disabled` として扱う。この endpoint を使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示し、不要になったら `disabled` に戻す。
+deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。`X_OAUTH_STATUS_EXPOSURE` は `disabled` または `deployment_diagnostic` を指定できる。未設定の場合は環境名に関係なく `disabled` として扱う。この endpoint を使う場合は `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` と32 bytes以上のランダムな `X_OAUTH_STATUS_DIAGNOSTIC_TOKEN` を設定し、request header `x-xguard-diagnostic-token` に同じ値を指定する。deployment diagnosticを有効化したままtokenを未設定または32 bytes未満にすると、backendは `invalid_runtime_env:X_OAUTH_STATUS_DIAGNOSTIC_TOKEN` で起動を停止する。診断後は `disabled` に戻し、tokenをrotationする。header値をproxy、access log、APMへ記録しない。
 
-有効時の endpoint は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` だけを返し、`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material は返さない。無効時は 404 JSON を返す。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、write/follow/DM scopes は追加しない。
+有効かつheader token一致時の endpoint は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` だけを返し、`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、`X_OAUTH_STATUS_DIAGNOSTIC_TOKEN` の値、token material は返さない。exposureが無効、tokenが未設定、headerが未指定または不一致の場合は一律404 JSONを返し、すべてのresponseに `Cache-Control: no-store` を付ける。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、write/follow/DM scopes は追加しない。
 
 `CORS_ORIGINS` は browser からAPIへアクセスできる origin のallowlistで、複数指定する場合はcomma区切りにする。未設定かつ `NODE_ENV=production` の場合は `APP_BASE_URL` の origin だけを許可し、`APP_BASE_URL` も未設定ならcross-origin requestを許可しない。local/prototype環境では未設定時に既定の `cors` 挙動を維持する。
 

@@ -1,4 +1,5 @@
 import cors, { type CorsOptions } from "cors";
+import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
 import { z } from "zod";
 import { MockXApiClient } from "./clients/xApiClient.js";
@@ -95,8 +96,13 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     response.json(buildOAuthStartResponse(config));
   });
 
-  app.get("/api/x/oauth/status", (_request, response) => {
-    if (config.oauthStatusExposure === "disabled") {
+  app.get("/api/x/oauth/status", (request, response) => {
+    response.set("Cache-Control", "no-store");
+
+    if (
+      config.oauthStatusExposure === "disabled" ||
+      !matchesToken(config.oauthStatusDiagnosticToken, request.get("x-xguard-diagnostic-token"))
+    ) {
       response.status(404).json({ error: "oauth_status_not_found" });
       return;
     }
@@ -163,4 +169,14 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   });
 
   return app;
+}
+
+function matchesToken(expected: string | undefined, actual: string | undefined): boolean {
+  if (!expected || !actual) {
+    return false;
+  }
+
+  const expectedDigest = createHash("sha256").update(expected).digest();
+  const actualDigest = createHash("sha256").update(actual).digest();
+  return timingSafeEqual(expectedDigest, actualDigest);
 }

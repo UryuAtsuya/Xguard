@@ -54,6 +54,7 @@ describe("XGuard API prototype", () => {
         clientSecretConfigured: true,
       },
       oauthStatusExposure: "deployment_diagnostic",
+      oauthStatusDiagnosticToken: "0123456789abcdef0123456789abcdef",
     });
     const authorizationUrl = new URL(response.authorizationUrl);
 
@@ -71,6 +72,7 @@ describe("XGuard API prototype", () => {
       X_CLIENT_SECRET: "super-secret-value",
       X_CALLBACK_URL: "https://xguard.example.com/api/x/oauth/callback",
       X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+      X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: "0123456789abcdef0123456789abcdef",
     });
 
     const response = buildOAuthStatusResponse(config);
@@ -87,6 +89,7 @@ describe("XGuard API prototype", () => {
     });
     expect(JSON.stringify(response)).not.toContain("real-client-id");
     expect(JSON.stringify(response)).not.toContain("super-secret-value");
+    expect(JSON.stringify(response)).not.toContain("0123456789abcdef0123456789abcdef");
     expect(JSON.stringify(response)).not.toContain("vault://");
     expect(JSON.stringify(response)).not.toContain("token");
     expect(Object.keys(response).sort()).toEqual(oauthStatusKeys);
@@ -106,11 +109,12 @@ describe("XGuard API prototype", () => {
         clientSecretConfigured: true,
       },
       oauthStatusExposure: "deployment_diagnostic" as const,
+      oauthStatusDiagnosticToken: "0123456789abcdef0123456789abcdef",
     };
 
     const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
     const statusResponse = createRouteResponseRecorder();
-    statusRoute.stack[0].handle({}, statusResponse);
+    statusRoute.stack[0].handle(createRouteRequest("0123456789abcdef0123456789abcdef"), statusResponse);
     const startResponse = buildOAuthStartResponse(config);
 
     expect(statusResponse.statusCode).toBeUndefined();
@@ -128,7 +132,9 @@ describe("XGuard API prototype", () => {
     expect(statusResponse.body).not.toHaveProperty("authorizationUrl");
     expect(JSON.stringify(statusResponse.body)).not.toContain("real-client-id");
     expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("0123456789abcdef0123456789abcdef");
     expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
+    expect(statusResponse.headers).toEqual({ "cache-control": "no-store" });
     for (const scope of disallowedOAuthScopes) {
       expect(JSON.stringify(statusResponse.body)).not.toContain(scope);
     }
@@ -152,8 +158,10 @@ describe("XGuard API prototype", () => {
 
     expect(statusResponse.statusCode).toBe(404);
     expect(statusResponse.body).toEqual({ error: "oauth_status_not_found" });
+    expect(statusResponse.headers).toEqual({ "cache-control": "no-store" });
     expect(JSON.stringify(statusResponse.body)).not.toContain("real-client-id");
     expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
+    expect(JSON.stringify(statusResponse.body)).not.toContain("0123456789abcdef0123456789abcdef");
     expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
   });
 
@@ -182,11 +190,12 @@ describe("XGuard API prototype", () => {
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
       X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+      X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: "0123456789abcdef0123456789abcdef",
     });
 
     const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
     const statusResponse = createRouteResponseRecorder();
-    statusRoute.stack[0].handle({}, statusResponse);
+    statusRoute.stack[0].handle(createRouteRequest("0123456789abcdef0123456789abcdef"), statusResponse);
 
     expect(statusResponse.statusCode).toBeUndefined();
     expect(statusResponse.body).toEqual({
@@ -204,6 +213,83 @@ describe("XGuard API prototype", () => {
     expect(JSON.stringify(statusResponse.body)).not.toContain("super-secret-value");
     expect(JSON.stringify(statusResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(statusResponse.body)).not.toContain("token");
+    expect(statusResponse.headers).toEqual({ "cache-control": "no-store" });
+  });
+
+  it("does not expose deployment diagnostic OAuth status without the matching header token", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+      X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: "0123456789abcdef0123456789abcdef",
+    });
+    const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
+    const missingTokenResponse = createRouteResponseRecorder();
+    const wrongLengthTokenResponse = createRouteResponseRecorder();
+    const sameLengthWrongTokenResponse = createRouteResponseRecorder();
+    statusRoute.stack[0].handle(createRouteRequest(), missingTokenResponse);
+    statusRoute.stack[0].handle(createRouteRequest("wrong-token"), wrongLengthTokenResponse);
+    statusRoute.stack[0].handle(createRouteRequest("0123456789abcdef0123456789abcdee"), sameLengthWrongTokenResponse);
+
+    expect(missingTokenResponse.statusCode).toBe(404);
+    expect(missingTokenResponse.body).toEqual({ error: "oauth_status_not_found" });
+    expect(wrongLengthTokenResponse.statusCode).toBe(404);
+    expect(wrongLengthTokenResponse.body).toEqual({ error: "oauth_status_not_found" });
+    expect(sameLengthWrongTokenResponse.statusCode).toBe(404);
+    expect(sameLengthWrongTokenResponse.body).toEqual({ error: "oauth_status_not_found" });
+    expect(missingTokenResponse.headers).toEqual({ "cache-control": "no-store" });
+    expect(wrongLengthTokenResponse.headers).toEqual({ "cache-control": "no-store" });
+    expect(sameLengthWrongTokenResponse.headers).toEqual({ "cache-control": "no-store" });
+  });
+
+  it("keeps deployment diagnostic OAuth status unavailable when its token is unset outside production", async () => {
+    const config = {
+      nodeEnv: "test",
+      port: 4000,
+      appBaseUrl: "https://xguard.example.com",
+      corsAllowedOrigins: undefined,
+      xOAuth: {
+        mode: "mock" as const,
+        clientId: "mock" as const,
+        callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
+        clientSecretConfigured: false as const,
+        missingEnv: ["X_CLIENT_ID"],
+      },
+      oauthStatusExposure: "deployment_diagnostic" as const,
+      oauthStatusDiagnosticToken: undefined,
+    };
+    const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
+    const statusResponse = createRouteResponseRecorder();
+
+    statusRoute.stack[0].handle(createRouteRequest("0123456789abcdef0123456789abcdef"), statusResponse);
+
+    expect(statusResponse.statusCode).toBe(404);
+    expect(statusResponse.body).toEqual({ error: "oauth_status_not_found" });
+    expect(statusResponse.headers).toEqual({ "cache-control": "no-store" });
+  });
+
+  it("rejects deployment diagnostic exposure without a sufficiently strong token", async () => {
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "test",
+        X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+      }),
+    ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_DIAGNOSTIC_TOKEN");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+        X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: " ",
+      }),
+    ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_DIAGNOSTIC_TOKEN");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+        X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: "too-short",
+      }),
+    ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_DIAGNOSTIC_TOKEN");
   });
 
   it("rejects unsupported OAuth status exposure values", async () => {
@@ -285,6 +371,8 @@ function findRegisteredGetRoute(
 type RouteResponseRecorder = {
   statusCode: number | undefined;
   body: unknown;
+  headers: Record<string, string>;
+  set: (headerName: string, value: string) => RouteResponseRecorder;
   status: (statusCode: number) => RouteResponseRecorder;
   json: (body: unknown) => void;
 };
@@ -293,6 +381,11 @@ function createRouteResponseRecorder(): RouteResponseRecorder {
   const response = {
     statusCode: undefined as number | undefined,
     body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    set(headerName: string, value: string) {
+      this.headers[headerName.toLowerCase()] = value;
+      return this;
+    },
     status(statusCode: number) {
       this.statusCode = statusCode;
       return this;
@@ -303,6 +396,14 @@ function createRouteResponseRecorder(): RouteResponseRecorder {
   };
 
   return response;
+}
+
+function createRouteRequest(oauthStatusDiagnosticToken?: string) {
+  return {
+    get(headerName: string) {
+      return headerName.toLowerCase() === "x-xguard-diagnostic-token" ? oauthStatusDiagnosticToken : undefined;
+    },
+  };
 }
 
 async function evaluateCorsOrigin(

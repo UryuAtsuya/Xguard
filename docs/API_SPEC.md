@@ -12,7 +12,7 @@
 |---|---|---|---|
 | GET | `/health` | API health check | なし |
 | GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata を返す | なし |
-| GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化された場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | なし |
+| GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化され、専用header tokenが一致した場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | なし |
 | GET | `/api/x/oauth/callback` | callback shape を検証し、repository interface に token references を保存する | なし |
 | POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する | なし |
 | GET | `/api/backup/status/:runId` | mock backup status を読む | なし |
@@ -20,9 +20,9 @@
 
 ## OAuth Status
 
-`GET /api/x/oauth/status` は deployment diagnostic 用の read-only endpoint である。`X_OAUTH_STATUS_EXPOSURE` が未設定の場合は環境名に関係なく無効化され、404 JSON を返す。診断で使う場合だけ `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` を明示する。
+`GET /api/x/oauth/status` は deployment diagnostic 用の read-only endpoint であり、無認証公開しない。診断で使う場合だけ `X_OAUTH_STATUS_EXPOSURE=deployment_diagnostic` と32 bytes以上のランダムな `X_OAUTH_STATUS_DIAGNOSTIC_TOKEN` を設定し、request header `x-xguard-diagnostic-token` に同じtokenを指定する。deployment diagnostic有効時は環境名に関係なくheader tokenを必須とし、tokenが未設定または32 bytes未満の場合はbackendの起動を停止する。exposureが無効、headerが未指定または不一致の場合は一律404 JSONを返す。すべてのresponseに `Cache-Control: no-store` を付ける。
 
-有効時の response fields は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` に固定する。`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、token material、write/follow/DM scopes は返さない。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで維持する。
+有効かつheader token一致時の response fields は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` に固定する。`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、`X_OAUTH_STATUS_DIAGNOSTIC_TOKEN` の値、token material、write/follow/DM scopes は返さない。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで維持する。
 
 ## 置き換え予定の Backend Interfaces
 

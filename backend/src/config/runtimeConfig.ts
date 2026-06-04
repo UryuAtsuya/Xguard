@@ -5,6 +5,7 @@ export interface RuntimeConfig {
   corsAllowedOrigins?: string[];
   xOAuth: XOAuthRuntimeConfig;
   oauthStatusExposure: OAuthStatusExposure;
+  oauthStatusDiagnosticToken?: string;
 }
 
 export type OAuthStatusExposure = "disabled" | "deployment_diagnostic";
@@ -34,6 +35,14 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const clientId = env.X_CLIENT_ID?.trim();
   const clientSecret = env.X_CLIENT_SECRET?.trim();
   const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE);
+  const oauthStatusDiagnosticToken = env.X_OAUTH_STATUS_DIAGNOSTIC_TOKEN?.trim() || undefined;
+
+  if (
+    oauthStatusExposure === "deployment_diagnostic" &&
+    (!oauthStatusDiagnosticToken || Buffer.byteLength(oauthStatusDiagnosticToken) < 32)
+  ) {
+    throw new Error("invalid_runtime_env:X_OAUTH_STATUS_DIAGNOSTIC_TOKEN");
+  }
 
   if (!clientId) {
     return {
@@ -42,6 +51,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       appBaseUrl,
       corsAllowedOrigins,
       oauthStatusExposure,
+      oauthStatusDiagnosticToken,
       xOAuth: {
         mode: "mock",
         clientId: "mock",
@@ -58,6 +68,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     appBaseUrl,
     corsAllowedOrigins,
     oauthStatusExposure,
+    oauthStatusDiagnosticToken,
     xOAuth: {
       mode: "configured",
       clientId,
