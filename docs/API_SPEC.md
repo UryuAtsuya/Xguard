@@ -8,15 +8,15 @@
 
 ## Routes 一覧
 
-| Method | Path | 目的 | 外部書き込み |
-|---|---|---|---|
-| GET | `/health` | API health check | なし |
-| GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata を返す | なし |
-| GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化され、専用header tokenが一致した場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | なし |
-| GET | `/api/x/oauth/callback` | callback shape を検証し、repository interface に token references を保存する | なし |
-| POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する | なし |
-| GET | `/api/backup/status/:runId` | mock backup status を読む | なし |
-| GET | `/api/recovery/:runId/proof` | mock backup 用の redacted proof DTO を返す | なし |
+| Method | Path | 目的 | 認証 | 外部書き込み |
+|---|---|---|---|---|
+| GET | `/health` | API health check | なし | なし |
+| GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata を返す | なし | なし |
+| GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化され、専用header tokenが一致した場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | `x-xguard-diagnostic-token` header | なし |
+| GET | `/api/x/oauth/callback` | callback shape を検証し、repository interface に token references を保存する | なし | なし |
+| POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する | なし | なし |
+| GET | `/api/backup/status/:runId` | mock backup status を読む | なし | なし |
+| GET | `/api/recovery/:runId/proof` | mock backup 用の redacted proof DTO を返す | なし | なし |
 
 ## OAuth Status
 

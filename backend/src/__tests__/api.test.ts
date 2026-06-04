@@ -1,3 +1,4 @@
+import request from "supertest";
 import { describe, expect, it } from "vitest";
 import {
   buildCorsOptions,
@@ -10,6 +11,9 @@ import { MockXApiClient } from "../clients/xApiClient.js";
 import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "../fixtures/mockXData.js";
 import { MockBackupService } from "../services/mockBackupService.js";
+
+const httpIt = process.env.CODEX_SANDBOX ? it.skip : it;
+const diagnosticToken = "0123456789abcdef0123456789abcdef";
 
 describe("XGuard API prototype", () => {
   const oauthStatusKeys = [
@@ -241,6 +245,55 @@ describe("XGuard API prototype", () => {
     expect(missingTokenResponse.headers).toEqual({ "cache-control": "no-store" });
     expect(wrongLengthTokenResponse.headers).toEqual({ "cache-control": "no-store" });
     expect(sameLengthWrongTokenResponse.headers).toEqual({ "cache-control": "no-store" });
+  });
+
+  httpIt("rejects missing and mismatched diagnostic tokens at the HTTP boundary", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+      X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: diagnosticToken,
+    });
+    const app = createApp(config);
+
+    const missingTokenResponse = await request(app).get("/api/x/oauth/status");
+    const mismatchedTokenResponse = await request(app)
+      .get("/api/x/oauth/status")
+      .set("x-xguard-diagnostic-token", "0123456789abcdef0123456789abcdee");
+
+    for (const response of [missingTokenResponse, mismatchedTokenResponse]) {
+      expect(response.status).toBe(404);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.body).toEqual({ error: "oauth_status_not_found" });
+      expect(response.text).not.toContain(diagnosticToken);
+    }
+  });
+
+  httpIt("serves deployment diagnostic status at the HTTP boundary only for the matching token", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+      X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
+      X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: diagnosticToken,
+    });
+
+    const response = await request(createApp(config))
+      .get("/api/x/oauth/status")
+      .set("x-xguard-diagnostic-token", diagnosticToken);
+
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body).toMatchObject({
+      exposure: "deployment_diagnostic",
+      scopes: ["tweet.read", "users.read", "offline.access"],
+      writesEnabled: false,
+    });
+    expect(response.text).not.toContain("real-client-id");
+    expect(response.text).not.toContain("super-secret-value");
+    expect(response.text).not.toContain(diagnosticToken);
   });
 
   it("keeps deployment diagnostic OAuth status unavailable when its token is unset outside production", async () => {
