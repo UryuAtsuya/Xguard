@@ -1,10 +1,11 @@
 import cors, { type CorsOptions } from "cors";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import express from "express";
 import { z } from "zod";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
+import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
 import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
 import { MockBackupService } from "./services/mockBackupService.js";
@@ -35,21 +36,45 @@ export function buildOAuthStatusResponse(config: RuntimeConfig = createRuntimeCo
   };
 }
 
-export function buildOAuthStartResponse(config: RuntimeConfig = createRuntimeConfig()) {
+export interface OAuthStartProofKey {
+  state: string;
+  codeChallenge: string;
+  codeVerifier: string;
+  expiresAt: Date;
+}
+
+export function createOAuthStartProofKey(config: RuntimeConfig = createRuntimeConfig()): OAuthStartProofKey {
+  const codeVerifier = randomBytes(config.oauthPkceVerifierBytes).toString("base64url");
+
+  return {
+    state: randomBytes(32).toString("base64url"),
+    codeVerifier,
+    codeChallenge: createHash("sha256").update(codeVerifier).digest("base64url"),
+    expiresAt: new Date(Date.now() + config.oauthStateTtlSeconds * 1000),
+  };
+}
+
+export function buildOAuthStartResponse(
+  config: RuntimeConfig = createRuntimeConfig(),
+  proofKey: OAuthStartProofKey = createOAuthStartProofKey(config),
+) {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: config.xOAuth.clientId,
     redirect_uri: config.xOAuth.callbackUrl,
     scope: V0_READ_ONLY_OAUTH_SCOPES.join(" "),
-    state: "mock-state",
-    code_challenge: "mock-code-challenge",
-    code_challenge_method: "plain",
+    state: proofKey.state,
+    code_challenge: proofKey.codeChallenge,
+    code_challenge_method: "S256",
   });
 
   return {
     authorizationUrl: `https://x.com/i/oauth2/authorize?${params.toString()}`,
     scopes: [...V0_READ_ONLY_OAUTH_SCOPES],
-    state: "mock-state",
+    state: proofKey.state,
+    codeChallenge: proofKey.codeChallenge,
+    codeChallengeMethod: "S256" as const,
+    stateExpiresAt: proofKey.expiresAt.toISOString(),
     mode: config.xOAuth.mode,
     callbackUrl: config.xOAuth.callbackUrl,
     writesEnabled: false,
@@ -75,6 +100,7 @@ export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()):
 export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
+  const oauthStateRepository = new InMemoryOAuthStateRepository();
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, Awaited<ReturnType<MockBackupService["runBackup"]>>>();
@@ -92,8 +118,16 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     });
   });
 
-  app.get("/api/x/oauth/start", (_request, response) => {
-    response.json(buildOAuthStartResponse(config));
+  app.get("/api/x/oauth/start", async (_request, response) => {
+    const proofKey = createOAuthStartProofKey(config);
+
+    await oauthStateRepository.save({
+      state: proofKey.state,
+      codeVerifier: proofKey.codeVerifier,
+      expiresAt: proofKey.expiresAt,
+    });
+
+    response.json(buildOAuthStartResponse(config, proofKey));
   });
 
   app.get("/api/x/oauth/status", (request, response) => {
@@ -118,12 +152,20 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
       return;
     }
 
+    const state = await oauthStateRepository.consume(query.data.state);
+
+    if (!state.ok) {
+      response.status(403).json({
+        error: state.reason === "expired" ? "expired_oauth_state" : "invalid_oauth_state",
+      });
+      return;
+    }
+
     await tokenRepository.saveXToken({
       xAccountId: fixtureAccount.id,
       provider: "x",
       scope: [...V0_READ_ONLY_OAUTH_SCOPES],
-      accessTokenRef: "vault://x/oauth/access/mock",
-      refreshTokenRef: "vault://x/oauth/refresh/mock",
+      ...buildPrototypeOAuthTokenRefs(query.data.code, state.record.codeVerifier),
     });
 
     response.json({
@@ -179,4 +221,13 @@ function matchesToken(expected: string | undefined, actual: string | undefined):
   const expectedDigest = createHash("sha256").update(expected).digest();
   const actualDigest = createHash("sha256").update(actual).digest();
   return timingSafeEqual(expectedDigest, actualDigest);
+}
+
+function buildPrototypeOAuthTokenRefs(code: string, codeVerifier: string) {
+  const tokenRefSeed = createHash("sha256").update(`${code}:${codeVerifier}`).digest("hex").slice(0, 24);
+
+  return {
+    accessTokenRef: `vault://x/oauth/access/prototype-${tokenRefSeed}`,
+    refreshTokenRef: `vault://x/oauth/refresh/prototype-${tokenRefSeed}`,
+  };
 }

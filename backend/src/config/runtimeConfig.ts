@@ -4,6 +4,8 @@ export interface RuntimeConfig {
   appBaseUrl?: string;
   corsAllowedOrigins?: string[];
   xOAuth: XOAuthRuntimeConfig;
+  oauthStateTtlSeconds: number;
+  oauthPkceVerifierBytes: number;
   oauthStatusExposure: OAuthStatusExposure;
   oauthStatusDiagnosticToken?: string;
 }
@@ -34,6 +36,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const callbackUrl = parseOptionalUrl("X_CALLBACK_URL", env.X_CALLBACK_URL) ?? fallbackCallbackUrl;
   const clientId = env.X_CLIENT_ID?.trim();
   const clientSecret = env.X_CLIENT_SECRET?.trim();
+  const oauthStateTtlSeconds = parsePositiveInteger(env.OAUTH_STATE_TTL_SECONDS, 300, "OAUTH_STATE_TTL_SECONDS");
+  const oauthPkceVerifierBytes = parseBoundedInteger(env.OAUTH_PKCE_VERIFIER_BYTES, 64, 32, 96, "OAUTH_PKCE_VERIFIER_BYTES");
   const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE);
   const oauthStatusDiagnosticToken = env.X_OAUTH_STATUS_DIAGNOSTIC_TOKEN?.trim() || undefined;
 
@@ -50,6 +54,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       port,
       appBaseUrl,
       corsAllowedOrigins,
+      oauthStateTtlSeconds,
+      oauthPkceVerifierBytes,
       oauthStatusExposure,
       oauthStatusDiagnosticToken,
       xOAuth: {
@@ -67,6 +73,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     port,
     appBaseUrl,
     corsAllowedOrigins,
+    oauthStateTtlSeconds,
+    oauthPkceVerifierBytes,
     oauthStatusExposure,
     oauthStatusDiagnosticToken,
     xOAuth: {
@@ -76,6 +84,38 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       clientSecretConfigured: Boolean(clientSecret),
     },
   };
+}
+
+function parsePositiveInteger(value: string | undefined, defaultValue: number, fieldName: string): number {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return defaultValue;
+  }
+
+  const parsed = Number(trimmed);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`invalid_runtime_env:${fieldName}`);
+  }
+
+  return parsed;
+}
+
+function parseBoundedInteger(
+  value: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+  fieldName: string,
+): number {
+  const parsed = parsePositiveInteger(value, defaultValue, fieldName);
+
+  if (parsed < min || parsed > max) {
+    throw new Error(`invalid_runtime_env:${fieldName}`);
+  }
+
+  return parsed;
 }
 
 function parseOAuthStatusExposure(value: string | undefined): OAuthStatusExposure {

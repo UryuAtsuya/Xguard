@@ -57,6 +57,8 @@ describe("XGuard API prototype", () => {
         callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
         clientSecretConfigured: true,
       },
+      oauthStateTtlSeconds: 300,
+      oauthPkceVerifierBytes: 64,
       oauthStatusExposure: "deployment_diagnostic",
       oauthStatusDiagnosticToken: "0123456789abcdef0123456789abcdef",
     });
@@ -66,6 +68,107 @@ describe("XGuard API prototype", () => {
     expect(authorizationUrl.searchParams.get("client_id")).toBe("real-client-id");
     expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("https://xguard.example.com/api/x/oauth/callback");
     expect(authorizationUrl.searchParams.get("scope")).toBe("tweet.read users.read offline.access");
+    expect(authorizationUrl.searchParams.get("state")).toBe(response.state);
+    expect(authorizationUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(response.state).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(JSON.stringify(response)).not.toContain("code_verifier");
+  });
+
+  it("stores a one-time configured OAuth state with S256 PKCE and rejects replayed callbacks", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "test",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    });
+    const app = createApp(config);
+    const startRoute = findRegisteredGetRoute(app, "/api/x/oauth/start");
+    const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
+    const startResponse = createRouteResponseRecorder();
+
+    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
+    const authorizationUrl = new URL(startBody.authorizationUrl);
+
+    expect(startBody.mode).toBe("configured");
+    expect(startBody.state).not.toBe("mock-state");
+    expect(startBody.state).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(authorizationUrl.searchParams.get("state")).toBe(startBody.state);
+    expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authorizationUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(JSON.stringify(startBody)).not.toContain("code_verifier");
+
+    const acceptedCallbackResponse = createRouteResponseRecorder();
+    await callbackRoute.stack[0].handle(
+      createRouteRequest(undefined, { code: "authorization-code", state: startBody.state }),
+      acceptedCallbackResponse,
+    );
+
+    expect(acceptedCallbackResponse.statusCode).toBeUndefined();
+    expect(acceptedCallbackResponse.body).toMatchObject({
+      tokenStorage: "repository-ref-only",
+      writesEnabled: false,
+    });
+
+    const replayedCallbackResponse = createRouteResponseRecorder();
+    await callbackRoute.stack[0].handle(
+      createRouteRequest(undefined, { code: "authorization-code", state: startBody.state }),
+      replayedCallbackResponse,
+    );
+
+    expect(replayedCallbackResponse.statusCode).toBe(403);
+    expect(replayedCallbackResponse.body).toEqual({ error: "invalid_oauth_state" });
+  });
+
+  it("rejects unknown configured OAuth callback state before storing token refs", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "test",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+    });
+    const callbackRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/callback");
+    const callbackResponse = createRouteResponseRecorder();
+
+    await callbackRoute.stack[0].handle(
+      createRouteRequest(undefined, { code: "authorization-code", state: "unknown-state" }),
+      callbackResponse,
+    );
+
+    expect(callbackResponse.statusCode).toBe(403);
+    expect(callbackResponse.body).toEqual({ error: "invalid_oauth_state" });
+  });
+
+  it("rejects expired configured OAuth callback state before storing token refs", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "test",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      OAUTH_STATE_TTL_SECONDS: "1",
+    });
+    const app = createApp(config);
+    const startRoute = findRegisteredGetRoute(app, "/api/x/oauth/start");
+    const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
+    const startResponse = createRouteResponseRecorder();
+
+    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
+    const expiredNow = new Date(new Date(startBody.stateExpiresAt).getTime() + 1_000);
+    const originalNow = Date.now;
+    Date.now = () => expiredNow.getTime();
+
+    try {
+      const callbackResponse = createRouteResponseRecorder();
+      await callbackRoute.stack[0].handle(
+        createRouteRequest(undefined, { code: "authorization-code", state: startBody.state }),
+        callbackResponse,
+      );
+
+      expect(callbackResponse.statusCode).toBe(403);
+      expect(callbackResponse.body).toEqual({ error: "expired_oauth_state" });
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   it("reports configured OAuth status without exposing secret material", async () => {
@@ -112,6 +215,8 @@ describe("XGuard API prototype", () => {
         callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
         clientSecretConfigured: true,
       },
+      oauthStateTtlSeconds: 300,
+      oauthPkceVerifierBytes: 64,
       oauthStatusExposure: "deployment_diagnostic" as const,
       oauthStatusDiagnosticToken: "0123456789abcdef0123456789abcdef",
     };
@@ -309,6 +414,8 @@ describe("XGuard API prototype", () => {
         clientSecretConfigured: false as const,
         missingEnv: ["X_CLIENT_ID"],
       },
+      oauthStateTtlSeconds: 300,
+      oauthPkceVerifierBytes: 64,
       oauthStatusExposure: "deployment_diagnostic" as const,
       oauthStatusDiagnosticToken: undefined,
     };
@@ -351,6 +458,19 @@ describe("XGuard API prototype", () => {
         X_OAUTH_STATUS_EXPOSURE: "public",
       }),
     ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_EXPOSURE");
+  });
+
+  it("rejects PKCE verifier byte lengths outside the S256-compatible range", async () => {
+    expect(() =>
+      createRuntimeConfig({
+        OAUTH_PKCE_VERIFIER_BYTES: "31",
+      }),
+    ).toThrow("invalid_runtime_env:OAUTH_PKCE_VERIFIER_BYTES");
+    expect(() =>
+      createRuntimeConfig({
+        OAUTH_PKCE_VERIFIER_BYTES: "97",
+      }),
+    ).toThrow("invalid_runtime_env:OAUTH_PKCE_VERIFIER_BYTES");
   });
 
   it("limits CORS to configured origins in production", async () => {
@@ -451,8 +571,9 @@ function createRouteResponseRecorder(): RouteResponseRecorder {
   return response;
 }
 
-function createRouteRequest(oauthStatusDiagnosticToken?: string) {
+function createRouteRequest(oauthStatusDiagnosticToken?: string, query: Record<string, unknown> = {}) {
   return {
+    query,
     get(headerName: string) {
       return headerName.toLowerCase() === "x-xguard-diagnostic-token" ? oauthStatusDiagnosticToken : undefined;
     },
