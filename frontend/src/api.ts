@@ -17,6 +17,17 @@ export interface OAuthStartResponse {
   writesEnabled: boolean;
 }
 
+export interface OAuthCallbackResponse {
+  connectedAccount: {
+    id: string;
+    username: string;
+    displayName?: string;
+  };
+  sessionToken: string;
+  tokenStorage: "repository-ref-only";
+  writesEnabled: boolean;
+}
+
 export interface BackupRunResponse {
   backupRun: BackupRun;
   proofPayload: ProofPublicPayload;
@@ -32,10 +43,18 @@ export async function startOAuth(): Promise<OAuthStartResponse> {
   return requestJson<OAuthStartResponse>("/api/x/oauth/start");
 }
 
-export async function runBackup(tweetLimit: number): Promise<BackupRunResponse> {
+export async function completeOAuthCallback(code: string, state: string): Promise<OAuthCallbackResponse> {
+  const params = new URLSearchParams({ code, state });
+  return requestJson<OAuthCallbackResponse>(`/api/x/oauth/callback?${params.toString()}`);
+}
+
+export async function runBackup(tweetLimit: number, sessionToken: string): Promise<BackupRunResponse> {
   return requestJson<BackupRunResponse>("/api/backup/run", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      authorization: `Bearer ${sessionToken}`,
+      "content-type": "application/json",
+    },
     body: JSON.stringify({ tweetLimit }),
   });
 }

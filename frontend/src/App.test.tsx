@@ -1,14 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { fetchHealth, runBackup, startOAuth } from "./api";
+import { completeOAuthCallback, fetchHealth, runBackup, startOAuth } from "./api";
 
 vi.mock("./api", () => ({
+  completeOAuthCallback: vi.fn(),
   fetchHealth: vi.fn(),
   startOAuth: vi.fn(),
   runBackup: vi.fn(),
 }));
 
+const mockedCompleteOAuthCallback = vi.mocked(completeOAuthCallback);
 const mockedFetchHealth = vi.mocked(fetchHealth);
 const mockedStartOAuth = vi.mocked(startOAuth);
 const mockedRunBackup = vi.mocked(runBackup);
@@ -35,6 +37,16 @@ describe("App", () => {
       state: "mock-state",
       mode: "mock",
       callbackUrl: "http://localhost:4000/api/x/oauth/callback",
+      writesEnabled: false,
+    });
+    mockedCompleteOAuthCallback.mockResolvedValue({
+      connectedAccount: {
+        id: "xacct_fixture_001",
+        username: "xguard_creator",
+        displayName: "XGuard Creator",
+      },
+      sessionToken: "session-token-1",
+      tokenStorage: "repository-ref-only",
       writesEnabled: false,
     });
 
@@ -91,10 +103,15 @@ describe("App", () => {
   it("runs the mock backup and shows proof preview data", async () => {
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: /Xを安全に接続/ }));
+    await waitFor(() => {
+      expect(mockedCompleteOAuthCallback).toHaveBeenCalledWith("mock-authorization-code", "mock-state");
+    });
+
     fireEvent.click(screen.getByRole("button", { name: /バックアップを実行/ }));
 
     await waitFor(() => {
-      expect(mockedRunBackup).toHaveBeenCalledWith(25);
+      expect(mockedRunBackup).toHaveBeenCalledWith(25, "session-token-1");
       expect(screen.getByText("@xguard_creator")).toBeInTheDocument();
       expect(screen.getByText("証明ページDTOを作成済み")).toBeInTheDocument();
     });

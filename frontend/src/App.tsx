@@ -12,7 +12,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { BackupRun, ProofPublicPayload } from "../../shared/types";
-import { fetchHealth, runBackup, startOAuth, type HealthResponse, type OAuthStartResponse } from "./api";
+import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse, type OAuthStartResponse } from "./api";
 
 type Step = "snapshot" | "connect" | "backup" | "proof";
 
@@ -20,6 +20,7 @@ export function App() {
   const [activeStep, setActiveStep] = useState<Step>("snapshot");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [oauth, setOauth] = useState<OAuthStartResponse | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [backupRun, setBackupRun] = useState<BackupRun | null>(null);
   const [proof, setProof] = useState<ProofPublicPayload | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -56,7 +57,13 @@ export function App() {
       const response = await startOAuth();
       setOauth(response);
       setActiveStep("connect");
-      setNotice(response.mode === "mock" ? "mock OAuthで確認中" : "OAuth設定済み");
+      if (response.mode === "mock") {
+        const callback = await completeOAuthCallback("mock-authorization-code", response.state);
+        setSessionToken(callback.sessionToken);
+        setNotice("mock OAuthで接続済み");
+      } else {
+        setNotice("OAuth設定済み");
+      }
     } catch {
       setNotice("OAuth開始に失敗");
     } finally {
@@ -65,11 +72,17 @@ export function App() {
   }
 
   async function handleBackup() {
+    if (!sessionToken) {
+      setActiveStep("connect");
+      setNotice("先にXを安全に接続");
+      return;
+    }
+
     setIsBusy(true);
     setNotice("プロフィールと直近投稿をバックアップ中");
 
     try {
-      const response = await runBackup(25);
+      const response = await runBackup(25, sessionToken);
       setBackupRun(response.backupRun);
       setProof(response.proofPayload);
       setActiveStep("proof");

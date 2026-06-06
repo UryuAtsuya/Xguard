@@ -1,11 +1,13 @@
 import cors, { type CorsOptions } from "cors";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import type { ProofPageVisibility } from "../../shared/types.js";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
 import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
+import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
 import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
 import { MockBackupService } from "./services/mockBackupService.js";
@@ -83,6 +85,16 @@ export function buildOAuthStartResponse(
 
 export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
+type BackupRunResult = Awaited<ReturnType<MockBackupService["runBackup"]>>;
+
+export interface BackupRunEntry {
+  userId: string;
+  visibility: ProofPageVisibility;
+  revokedAt: string | null;
+  backupRun: BackupRunResult["backupRun"];
+  proofPayload: BackupRunResult["proofPayload"];
+}
+
 export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
   if (!config.corsAllowedOrigins) {
     return {};
@@ -101,12 +113,15 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
   const oauthStateRepository = new InMemoryOAuthStateRepository();
+  const sessionRepository = new InMemorySessionRepository();
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
-  const backupRuns = new Map<string, Awaited<ReturnType<MockBackupService["runBackup"]>>>();
+  const backupRuns = new Map<string, BackupRunEntry>();
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
+  app.locals.sessionRepository = sessionRepository;
+  app.locals.backupRuns = backupRuns;
 
   app.get("/health", (_request, response) => {
     response.json({
@@ -168,14 +183,18 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
       ...buildPrototypeOAuthTokenRefs(query.data.code, state.record.codeVerifier),
     });
 
+    const sessionToken = randomBytes(32).toString("base64url");
+    await sessionRepository.save(sessionToken, fixtureAccount.userId);
+
     response.json({
       connectedAccount: fixtureAccount,
+      sessionToken,
       tokenStorage: "repository-ref-only",
       writesEnabled: false,
     });
   });
 
-  app.post("/api/backup/run", async (request, response) => {
+  app.post("/api/backup/run", requireAuth(sessionRepository), async (request, response) => {
     const body = z.object({ tweetLimit: z.number().int().min(1).max(100).default(25) }).safeParse(request.body ?? {});
 
     if (!body.success) {
@@ -184,33 +203,94 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     }
 
     const result = await backupService.runBackup(body.data.tweetLimit);
-    backupRuns.set(result.backupRun.id, result);
+    backupRuns.set(result.backupRun.id, {
+      userId: getAuthenticatedUserId(request),
+      visibility: "public",
+      revokedAt: null,
+      ...result,
+    });
     response.status(201).json(result);
   });
 
-  app.get("/api/backup/status/:runId", (request, response) => {
-    const result = backupRuns.get(request.params.runId);
+  app.get("/api/backup/status/:runId", requireAuth(sessionRepository), (request, response) => {
+    const entry = backupRuns.get(getStringParam(request, "runId"));
 
-    if (!result) {
+    if (!entry) {
       response.status(404).json({ error: "backup_run_not_found" });
       return;
     }
 
-    response.json(result.backupRun);
+    if (entry.userId !== getAuthenticatedUserId(request)) {
+      response.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    response.json(entry.backupRun);
   });
 
-  app.get("/api/recovery/:runId/proof", (request, response) => {
-    const result = backupRuns.get(request.params.runId);
+  app.get("/api/recovery/:runId/proof", requireAuth(sessionRepository), (request, response) => {
+    const entry = backupRuns.get(getStringParam(request, "runId"));
 
-    if (!result) {
+    if (!entry) {
       response.status(404).json({ error: "proof_payload_not_found" });
       return;
     }
 
-    response.json(result.proofPayload);
+    if (entry.userId !== getAuthenticatedUserId(request)) {
+      response.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    if (entry.visibility === "private" || entry.revokedAt) {
+      response.status(404).json({ error: "proof_payload_not_found" });
+      return;
+    }
+
+    response.json(entry.proofPayload);
   });
 
   return app;
+}
+
+interface AuthenticatedRequest extends Request {
+  userId?: string;
+}
+
+function requireAuth(sessionRepository: InMemorySessionRepository) {
+  return async (request: AuthenticatedRequest, response: Response, next: NextFunction): Promise<void> => {
+    const auth = request.get("Authorization");
+    const token = auth?.startsWith("Bearer ") ? auth.slice(7) : undefined;
+
+    if (!token) {
+      response.status(401).json({ error: "authentication_required" });
+      return;
+    }
+
+    const userId = await sessionRepository.lookup(token);
+
+    if (!userId) {
+      response.status(401).json({ error: "invalid_session" });
+      return;
+    }
+
+    request.userId = userId;
+    next();
+  };
+}
+
+function getAuthenticatedUserId(request: Request): string {
+  const userId = (request as AuthenticatedRequest).userId;
+
+  if (!userId) {
+    throw new Error("authenticated_user_missing");
+  }
+
+  return userId;
+}
+
+function getStringParam(request: Request, paramName: string): string {
+  const value = request.params[paramName];
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function matchesToken(expected: string | undefined, actual: string | undefined): boolean {
