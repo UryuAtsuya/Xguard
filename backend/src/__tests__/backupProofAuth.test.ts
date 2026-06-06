@@ -21,7 +21,7 @@ describe("backup and proof auth boundary", () => {
     });
   });
 
-  it("lets an owner create and read their backup and proof", async () => {
+  it("lets an owner create and read their backup status", async () => {
     const app = createApp();
     const sessionToken = await createSession(app);
     const backupResponse = await invokeRoute(app, "post", "/api/backup/run", {
@@ -34,13 +34,36 @@ describe("backup and proof auth boundary", () => {
       authorization: `Bearer ${sessionToken}`,
       params: { runId },
     });
+
+    expect(backupResponse.statusCode).toBe(201);
+    expect(statusResponse.statusCode).toBeUndefined();
+  });
+
+  it("keeps proof payload private by default", async () => {
+    const app = createApp();
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+
+    expect(
+      await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
+        authorization: `Bearer ${sessionToken}`,
+        params: { runId },
+      }),
+    ).toMatchObject({ statusCode: 404, body: { error: "proof_payload_not_found" } });
+  });
+
+  it("lets an owner read public proof without exposing token material", async () => {
+    const app = createApp();
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+    const entry = app.locals.backupRuns.get(runId) as BackupRunEntry;
+    app.locals.backupRuns.set(runId, { ...entry, visibility: "public" });
+
     const proofResponse = await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
       authorization: `Bearer ${sessionToken}`,
       params: { runId },
     });
 
-    expect(backupResponse.statusCode).toBe(201);
-    expect(statusResponse.statusCode).toBeUndefined();
     expect(proofResponse.statusCode).toBeUndefined();
     expect(JSON.stringify(proofResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(proofResponse.body)).not.toContain("accessToken");

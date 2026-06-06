@@ -205,7 +205,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     const result = await backupService.runBackup(body.data.tweetLimit);
     backupRuns.set(result.backupRun.id, {
       userId: getAuthenticatedUserId(request),
-      visibility: "public",
+      visibility: "private",
       revokedAt: null,
       ...result,
     });
