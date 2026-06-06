@@ -228,6 +228,46 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     response.json(entry.backupRun);
   });
 
+  app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), (request, response) => {
+    const body = z.object({ visibility: z.enum(["unlisted", "public", "revoked"]) }).safeParse(request.body ?? {});
+
+    if (!body.success) {
+      response.status(400).json({ error: "invalid_proof_visibility_request", details: body.error.flatten().fieldErrors });
+      return;
+    }
+
+    const runId = getStringParam(request, "runId");
+    const entry = backupRuns.get(runId);
+
+    if (!entry) {
+      response.status(404).json({ error: "proof_payload_not_found" });
+      return;
+    }
+
+    if (entry.userId !== getAuthenticatedUserId(request)) {
+      response.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    if (entry.revokedAt && body.data.visibility !== "revoked") {
+      response.status(409).json({ error: "proof_payload_revoked" });
+      return;
+    }
+
+    const updatedEntry: BackupRunEntry = {
+      ...entry,
+      visibility: body.data.visibility,
+      revokedAt: body.data.visibility === "revoked" ? entry.revokedAt ?? new Date().toISOString() : null,
+    };
+    backupRuns.set(runId, updatedEntry);
+
+    response.json({
+      runId,
+      visibility: updatedEntry.visibility,
+      revokedAt: updatedEntry.revokedAt,
+    });
+  });
+
   app.get("/api/recovery/:runId/proof", requireAuth(sessionRepository), (request, response) => {
     const entry = backupRuns.get(getStringParam(request, "runId"));
 

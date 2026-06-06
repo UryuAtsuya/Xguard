@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { BackupRunEntry } from "../app.js";
 import { createApp } from "../app.js";
 
 describe("backup and proof auth boundary", () => {
@@ -16,6 +15,15 @@ describe("backup and proof auth boundary", () => {
       body: { error: "authentication_required" },
     });
     expect(await invokeRoute(app, "get", "/api/recovery/:runId/proof", { params: { runId: "missing-run" } })).toMatchObject({
+      statusCode: 401,
+      body: { error: "authentication_required" },
+    });
+    expect(
+      await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+        body: { visibility: "public" },
+        params: { runId: "missing-run" },
+      }),
+    ).toMatchObject({
       statusCode: 401,
       body: { error: "authentication_required" },
     });
@@ -56,18 +64,43 @@ describe("backup and proof auth boundary", () => {
     const app = createApp();
     const sessionToken = await createSession(app);
     const runId = await createBackupRun(app, sessionToken);
-    const entry = app.locals.backupRuns.get(runId) as BackupRunEntry;
-    app.locals.backupRuns.set(runId, { ...entry, visibility: "public" });
+    const visibilityResponse = await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "public" },
+      params: { runId },
+    });
 
     const proofResponse = await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
       authorization: `Bearer ${sessionToken}`,
       params: { runId },
     });
 
+    expect(visibilityResponse.statusCode).toBeUndefined();
+    expect(visibilityResponse.body).toMatchObject({ runId, visibility: "public", revokedAt: null });
     expect(proofResponse.statusCode).toBeUndefined();
     expect(JSON.stringify(proofResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(proofResponse.body)).not.toContain("accessToken");
     expect(JSON.stringify(proofResponse.body)).not.toContain("refreshToken");
+  });
+
+  it("lets an owner mark proof unlisted and read it", async () => {
+    const app = createApp();
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+
+    expect(
+      await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+        authorization: `Bearer ${sessionToken}`,
+        body: { visibility: "unlisted" },
+        params: { runId },
+      }),
+    ).toMatchObject({ body: { runId, visibility: "unlisted", revokedAt: null } });
+    expect(
+      await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
+        authorization: `Bearer ${sessionToken}`,
+        params: { runId },
+      }),
+    ).toMatchObject({ statusCode: undefined });
   });
 
   it("rejects another user's backup status and proof access", async () => {
@@ -93,6 +126,13 @@ describe("backup and proof auth boundary", () => {
         params: { runId },
       }),
     ).toMatchObject({ statusCode: 403, body: { error: "forbidden" } });
+    expect(
+      await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+        authorization: `Bearer ${otherToken}`,
+        body: { visibility: "public" },
+        params: { runId },
+      }),
+    ).toMatchObject({ statusCode: 403, body: { error: "forbidden" } });
   });
 
   it("hides private and revoked proof payloads from the owner", async () => {
@@ -101,16 +141,14 @@ describe("backup and proof auth boundary", () => {
     const privateRunId = await createBackupRun(app, sessionToken);
     const revokedRunId = await createBackupRun(app, sessionToken);
 
-    const privateEntry = app.locals.backupRuns.get(privateRunId) as BackupRunEntry;
-    app.locals.backupRuns.set(privateRunId, { ...privateEntry, visibility: "private" });
-
-    const revokedEntry = app.locals.backupRuns.get(revokedRunId) as BackupRunEntry;
-    app.locals.backupRuns.set(revokedRunId, {
-      ...revokedEntry,
-      visibility: "revoked",
-      revokedAt: "2026-06-06T04:30:00.000Z",
+    const revokeResponse = await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "revoked" },
+      params: { runId: revokedRunId },
     });
 
+    expect(revokeResponse.statusCode).toBeUndefined();
+    expect(revokeResponse.body).toMatchObject({ runId: revokedRunId, visibility: "revoked" });
     expect(
       await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
         authorization: `Bearer ${sessionToken}`,
@@ -123,6 +161,40 @@ describe("backup and proof auth boundary", () => {
         params: { runId: revokedRunId },
       }),
     ).toMatchObject({ statusCode: 404, body: { error: "proof_payload_not_found" } });
+  });
+
+  it("does not reopen a revoked proof payload", async () => {
+    const app = createApp();
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+
+    expect(
+      await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+        authorization: `Bearer ${sessionToken}`,
+        body: { visibility: "public" },
+        params: { runId },
+      }),
+    ).toMatchObject({ statusCode: 409, body: { error: "proof_payload_revoked" } });
+  });
+
+  it("rejects unsupported proof visibility changes", async () => {
+    const app = createApp();
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+
+    expect(
+      await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+        authorization: `Bearer ${sessionToken}`,
+        body: { visibility: "private" },
+        params: { runId },
+      }),
+    ).toMatchObject({ statusCode: 400, body: { error: "invalid_proof_visibility_request" } });
   });
 
   it("keeps missing run ids as not found after authentication", async () => {
@@ -138,6 +210,13 @@ describe("backup and proof auth boundary", () => {
     expect(
       await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
         authorization: `Bearer ${sessionToken}`,
+        params: { runId: "missing-run" },
+      }),
+    ).toMatchObject({ statusCode: 404, body: { error: "proof_payload_not_found" } });
+    expect(
+      await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+        authorization: `Bearer ${sessionToken}`,
+        body: { visibility: "public" },
         params: { runId: "missing-run" },
       }),
     ).toMatchObject({ statusCode: 404, body: { error: "proof_payload_not_found" } });
@@ -173,7 +252,7 @@ async function createBackupRun(app: ReturnType<typeof createApp>, sessionToken: 
   return getRunId(backupResponse.body);
 }
 
-type HttpMethod = "get" | "post";
+type HttpMethod = "get" | "patch" | "post";
 
 interface RouteInvocationOptions {
   authorization?: string;

@@ -16,7 +16,8 @@
 | GET | `/api/x/oauth/callback` | callback shape、`state`、TTL、replay を検証し、repository interface に token references を保存する | OAuth `state` | なし |
 | POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する。作成された proof は初期 `private` として扱う | `Authorization: Bearer <sessionToken>` | なし |
 | GET | `/api/backup/status/:runId` | mock backup status を owner のみ読む | `Authorization: Bearer <sessionToken>` | なし |
-| GET | `/api/recovery/:runId/proof` | mock backup 用の redacted proof DTO を owner かつ `public` / `unlisted` 相当で返す。`private` / revoked は404 | `Authorization: Bearer <sessionToken>` | なし |
+| PATCH | `/api/recovery/:runId/proof/visibility` | owner のみ proof visibility を `unlisted` / `public` / `revoked` に更新する。初期 `private` からの公開/取消を扱い、revoked 後の再公開は409 | `Authorization: Bearer <sessionToken>` | なし |
+| GET | `/api/recovery/:runId/proof` | owner preview 用に mock backup の redacted proof DTO を `public` / `unlisted` 相当で返す。`private` / revoked は404 | `Authorization: Bearer <sessionToken>` | なし |
 
 ## OAuth Status
 
