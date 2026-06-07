@@ -48,6 +48,18 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     throw new Error("invalid_runtime_env:X_OAUTH_STATUS_DIAGNOSTIC_TOKEN");
   }
 
+  if (nodeEnv === "production" && !clientId) {
+    throw new Error("invalid_runtime_env:X_CLIENT_ID");
+  }
+
+  if (nodeEnv === "production" && !clientSecret) {
+    throw new Error("invalid_runtime_env:X_CLIENT_SECRET");
+  }
+
+  if (nodeEnv === "production" && isLocalhostUrl(callbackUrl)) {
+    throw new Error("invalid_runtime_env:X_CALLBACK_URL");
+  }
+
   if (!clientId) {
     return {
       nodeEnv,
@@ -187,6 +199,11 @@ function parseUrlOrigin(fieldName: string, value: string): string {
   } catch {
     throw new Error(`invalid_runtime_env:${fieldName}`);
   }
+}
+
+function isLocalhostUrl(value: string): boolean {
+  const hostname = new URL(value).hostname.toLowerCase();
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 function joinUrlPath(baseUrl: string, path: string): string {

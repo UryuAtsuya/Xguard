@@ -176,6 +176,11 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
       return;
     }
 
+    if (requiresRealOAuthTokenExchange(config)) {
+      response.status(501).json({ error: "x_oauth_token_exchange_not_implemented" });
+      return;
+    }
+
     await tokenRepository.saveXToken({
       xAccountId: fixtureAccount.id,
       provider: "x",
@@ -350,4 +355,8 @@ function buildPrototypeOAuthTokenRefs(code: string, codeVerifier: string) {
     accessTokenRef: `vault://x/oauth/access/prototype-${tokenRefSeed}`,
     refreshTokenRef: `vault://x/oauth/refresh/prototype-${tokenRefSeed}`,
   };
+}
+
+function requiresRealOAuthTokenExchange(config: RuntimeConfig): boolean {
+  return config.nodeEnv === "production" && config.xOAuth.mode === "configured";
 }

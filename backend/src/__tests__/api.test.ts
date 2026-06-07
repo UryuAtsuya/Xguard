@@ -171,6 +171,33 @@ describe("XGuard API prototype", () => {
     }
   });
 
+  it("does not issue prototype token refs for configured OAuth callbacks in production", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    });
+    const app = createApp(config);
+    const startRoute = findRegisteredGetRoute(app, "/api/x/oauth/start");
+    const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
+    const startResponse = createRouteResponseRecorder();
+
+    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
+    const callbackResponse = createRouteResponseRecorder();
+    await callbackRoute.stack[0].handle(
+      createRouteRequest(undefined, { code: "authorization-code", state: startBody.state }),
+      callbackResponse,
+    );
+
+    expect(callbackResponse.statusCode).toBe(501);
+    expect(callbackResponse.body).toEqual({ error: "x_oauth_token_exchange_not_implemented" });
+    expect(JSON.stringify(callbackResponse.body)).not.toContain("vault://");
+    expect(JSON.stringify(callbackResponse.body)).not.toContain("sessionToken");
+    expect(await app.locals.sessionRepository.lookup("authorization-code")).toBeUndefined();
+  });
+
   it("reports configured OAuth status without exposing secret material", async () => {
     const config = createRuntimeConfig({
       PORT: "4000",
@@ -330,6 +357,7 @@ describe("XGuard API prototype", () => {
       NODE_ENV: "production",
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
       X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
       X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: "0123456789abcdef0123456789abcdef",
     });
@@ -357,6 +385,7 @@ describe("XGuard API prototype", () => {
       NODE_ENV: "production",
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
       X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
       X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: diagnosticToken,
     });
@@ -460,6 +489,48 @@ describe("XGuard API prototype", () => {
     ).toThrow("invalid_runtime_env:X_OAUTH_STATUS_EXPOSURE");
   });
 
+  it("requires X OAuth client credentials in production", async () => {
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        APP_BASE_URL: "https://xguard.example.com",
+      }),
+    ).toThrow("invalid_runtime_env:X_CLIENT_ID");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        APP_BASE_URL: "https://xguard.example.com",
+        X_CLIENT_ID: "real-client-id",
+      }),
+    ).toThrow("invalid_runtime_env:X_CLIENT_SECRET");
+  });
+
+  it("rejects localhost OAuth callback URLs in production", async () => {
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        APP_BASE_URL: "http://localhost:4000",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CALLBACK_URL: "http://127.0.0.1:4000/api/x/oauth/callback",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+  });
+
   it("rejects PKCE verifier byte lengths outside the S256-compatible range", async () => {
     expect(() =>
       createRuntimeConfig({
@@ -477,6 +548,8 @@ describe("XGuard API prototype", () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
       APP_BASE_URL: "https://app.xguard.example.com/app",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
     });
     const corsOptions = buildCorsOptions(config);
     const allowed = await evaluateCorsOrigin(corsOptions.origin, "https://app.xguard.example.com");
