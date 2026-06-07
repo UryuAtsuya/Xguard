@@ -94,3 +94,20 @@ Repository row mapping は Supabase `numeric` の `estimated_cost_usd` が strin
 - 接続roleが test fixture 用の `auth.users` / `user_profiles` / `x_accounts` / `backup_runs` seed と `SET ROLE` を実行できること。
 
 このintegration testは1 transaction内でfixtureを作成し、最後に `rollback` する。検証観点は `service_role` 実行、`authenticated` 拒否、`x_account_id` ownership、`backup_run_id` ownership、同一X account整合性、存在しない `backup_run_id`、negative metering values、monthly cost limit超過である。DB URLやsecret値はtest failure messageに出さない。
+
+## 2026-06-07 Release Gate
+
+production release では、Developer Console の最新表示を最終確認した上で、少なくとも次の前提を runtime / operations の cost guard に反映する。
+
+| Resource type | Release gate unit cost | 適用先 |
+|---|---:|---|
+| `post` | `$0.005/resource` | `GET /2/users/:id/tweets` など post read。 |
+| `user` | `$0.010/resource` | `GET /2/users/me` と user/profile read。 |
+
+`Owned Reads` は、X Developer app owner 本人の読み込み枠として扱う。XGuard は複数顧客の user-authorized backup を行う SaaS なので、顧客ごとの tweet read / user read を `Owned Reads` 割引前提で見積もらない。Developer Console で第三者ユーザー向け SaaS に同等条件が明示されるまで、上記の通常 read 単価を cost estimate の basis とする。
+
+`GET https://api.x.com/2/usage/tweets` は operations health check として扱い、月次の post read 使用量を API 側の実使用量と `api_usage_events` の internal ledger で突合する。User read は Usage API の post usage だけでは捕捉できないため、Developer Console の endpoint別 usage / cost、total spend、credit balance を monthly closeout の evidence として保存し、internal ledger と差分確認する。Usage API が契約 tier で使えない場合も、Developer Console の usage dashboard を evidence として保存する。
+
+X Developer Portal では `Spending limit` を必ず設定する。XGuard 側では `user_profiles.monthly_api_cost_limit_usd` と service-level monthly budget の両方を持ち、projected monthly cost が limit の 80% に達した時点で新規 backup run を停止し、対象 user と operator へ通知する。100% 到達後の retry は行わず、run status は `failed` または `rate_limited` として明示する。
+
+この release gate が満たされるまで、`docs/API_COST_MODEL.md` の unit cost は商用pricingの最終根拠ではなく、prototypeを過小見積もりしないための conservative implementation default として扱う。
