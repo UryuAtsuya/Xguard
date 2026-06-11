@@ -56,7 +56,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     throw new Error("invalid_runtime_env:X_CLIENT_SECRET");
   }
 
-  if (nodeEnv === "production" && isLocalhostUrl(callbackUrl)) {
+  if (nodeEnv === "production" && !isSecurePublicUrl(callbackUrl)) {
     throw new Error("invalid_runtime_env:X_CALLBACK_URL");
   }
 
@@ -201,9 +201,14 @@ function parseUrlOrigin(fieldName: string, value: string): string {
   }
 }
 
-function isLocalhostUrl(value: string): boolean {
-  const hostname = new URL(value).hostname.toLowerCase();
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+function isSecurePublicUrl(value: string): boolean {
+  const url = new URL(value);
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  const isIpv4Loopback = /^127(?:\.\d{1,3}){3}$/.test(hostname);
+  const isIpv4MappedLoopback =
+    /^::ffff:127(?:\.\d{1,3}){3}$/.test(hostname) || /^::ffff:7f[0-9a-f]{2}:/.test(hostname);
+  const isLoopback = hostname === "localhost" || hostname === "::1" || isIpv4Loopback || isIpv4MappedLoopback;
+  return url.protocol === "https:" && !isLoopback;
 }
 
 function joinUrlPath(baseUrl: string, path: string): string {

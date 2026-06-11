@@ -529,6 +529,46 @@ describe("XGuard API prototype", () => {
         X_CLIENT_SECRET: "super-secret-value",
       }),
     ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CALLBACK_URL: "https://127.0.0.2/api/x/oauth/callback",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CALLBACK_URL: "https://[::1]/api/x/oauth/callback",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CALLBACK_URL: "http://xguard.example.com/api/x/oauth/callback",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CALLBACK_URL: "https://localhost./api/x/oauth/callback",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
+    expect(() =>
+      createRuntimeConfig({
+        NODE_ENV: "production",
+        X_CALLBACK_URL: "https://[::ffff:127.0.0.1]/api/x/oauth/callback",
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "super-secret-value",
+      }),
+    ).toThrow("invalid_runtime_env:X_CALLBACK_URL");
   });
 
   it("rejects PKCE verifier byte lengths outside the S256-compatible range", async () => {

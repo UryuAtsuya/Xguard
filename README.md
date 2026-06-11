@@ -70,7 +70,7 @@ X_CALLBACK_URL=
 ```
 
 - `X_CLIENT_ID`: mock modeからconfigured modeへ切り替える最小スイッチ。`NODE_ENV=production` では必須です。
-- `X_CALLBACK_URL`: 明示したcallback URL。未設定時は `APP_BASE_URL` またはlocal portから生成します。`NODE_ENV=production` ではlocalhost/loopback callbackを拒否します。
+- `X_CALLBACK_URL`: 明示したcallback URL。未設定時は `APP_BASE_URL` またはlocal portから生成します。`NODE_ENV=production` ではHTTPSを必須とし、localhost/loopback callbackを拒否します。
 - `X_CLIENT_SECRET`: 現時点では検知のみ。token exchangeはまだ未実装です。`NODE_ENV=production` では必須で、configured callback では prototype token refs / session を発行せず、`501` で停止します。
 
 ## 正本

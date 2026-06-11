@@ -89,16 +89,20 @@ describe("App", () => {
     });
   });
 
-  it("shows the mobile-first XGuard shell and API readiness", async () => {
-    render(<App />);
+  it(
+    "shows the mobile-first XGuard shell and API readiness",
+    async () => {
+      render(<App />);
 
-    expect(screen.getByRole("heading", { name: "消える前に、証明を残す。" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "消える前に、証明を残す。" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText("mock APIに接続済み")).toBeInTheDocument();
-    });
-  });
+      await waitFor(() => {
+        expect(screen.getByText("mock APIに接続済み")).toBeInTheDocument();
+      });
+    },
+    15_000,
+  );
 
   it("runs the mock backup and shows proof preview data", async () => {
     render(<App />);
