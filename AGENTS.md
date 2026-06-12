@@ -38,9 +38,14 @@ Ship XGuard coding work quickly, safely, and with GitHub sync completed.
 - Run `git diff --check` before committing.
 - If a verification step cannot run, record it in the final report.
 
-## Push Rule
+## Branch And Push Rules
 
-- When meaningful coding work is completed and verification passes, commit and push to `origin/main`.
+- Use short-lived `feature/*` branches for implementation work.
+- Open pull requests from `feature/*` into `develop`.
+- Treat `develop` as the staging branch and `main` as the production branch.
+- Promote the exact tested commit from `develop` to `main` through a pull request.
+- Do not push implementation work directly to `main`.
+- When meaningful coding work is completed and verification passes, commit and push to the current `feature/*` branch or `develop`.
 - If `origin` is missing, set it to `https://github.com/UryuAtsuya/Xguard.git`.
 - Do not leave completed coding work only local unless the user explicitly says not to push or the push is blocked.
 - Report the XGuard commit hash and whether it was pushed.

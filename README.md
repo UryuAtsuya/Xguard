@@ -81,7 +81,15 @@ X_CALLBACK_URL=
 
 ## GitHub同期ルール
 
-意味のある実装変更は、検証後に `UryuAtsuya/Xguard` へcommit/pushします。`origin` がない場合は以下を設定します。
+ブランチは次の役割で運用します。
+
+- `feature/*`: 個別の実装作業。
+- `develop`: staging環境へ反映する統合ブランチ。
+- `main`: production環境へ反映するリリースブランチ。
+
+通常の変更は `feature/*` から `develop` へpull requestを作成します。staging検証後、検証済みの同一commitを `develop` から `main` へpull requestで昇格します。実装変更を `main` へ直接pushしません。
+
+意味のある実装変更は、検証後に `UryuAtsuya/Xguard` の作業ブランチまたは `develop` へcommit/pushします。`origin` がない場合は以下を設定します。
 
 ```bash
 git remote add origin https://github.com/UryuAtsuya/Xguard.git
