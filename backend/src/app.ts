@@ -95,6 +95,17 @@ export interface BackupRunEntry {
   proofPayload: BackupRunResult["proofPayload"];
 }
 
+export interface ProofPageComplianceEvent {
+  eventType: "proof_page_revoked";
+  source: "PATCH /api/recovery/:runId/proof/visibility";
+  runId: string;
+  userId: string;
+  previousVisibility: ProofPageVisibility;
+  newVisibility: "revoked";
+  occurredAt: string;
+  recordedAt: string;
+}
+
 export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
   if (!config.corsAllowedOrigins) {
     return {};
@@ -117,11 +128,13 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, BackupRunEntry>();
+  const proofPageComplianceEvents: ProofPageComplianceEvent[] = [];
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
   app.locals.sessionRepository = sessionRepository;
   app.locals.backupRuns = backupRuns;
+  app.locals.proofPageComplianceEvents = proofPageComplianceEvents;
 
   app.get("/health", (_request, response) => {
     response.json({
@@ -259,12 +272,27 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
       return;
     }
 
+    const revokedAt =
+      body.data.visibility === "revoked" ? entry.revokedAt ?? new Date().toISOString() : null;
     const updatedEntry: BackupRunEntry = {
       ...entry,
       visibility: body.data.visibility,
-      revokedAt: body.data.visibility === "revoked" ? entry.revokedAt ?? new Date().toISOString() : null,
+      revokedAt,
     };
     backupRuns.set(runId, updatedEntry);
+
+    if (body.data.visibility === "revoked" && entry.visibility !== "revoked") {
+      proofPageComplianceEvents.push({
+        eventType: "proof_page_revoked",
+        source: "PATCH /api/recovery/:runId/proof/visibility",
+        runId,
+        userId: entry.userId,
+        previousVisibility: entry.visibility,
+        newVisibility: "revoked",
+        occurredAt: revokedAt!,
+        recordedAt: new Date().toISOString(),
+      });
+    }
 
     response.json({
       runId,
