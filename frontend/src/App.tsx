@@ -1,379 +1,256 @@
 import {
-  Activity,
-  BadgeCheck,
-  Bell,
+  AlertTriangle,
+  Archive,
+  BellOff,
+  Building2,
   ChevronRight,
-  Clock3,
-  DatabaseBackup,
+  Copy,
+  Download,
   EyeOff,
-  FileCheck2,
-  KeyRound,
-  LayoutDashboard,
   LockKeyhole,
+  MessageSquareText,
   RefreshCw,
   Search,
-  Settings2,
   ShieldCheck,
+  Store,
+  UserRound,
+  Wand2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { BackupRun, ProofPublicPayload } from "../../shared/types";
-import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse, type OAuthStartResponse } from "./api";
+import profilePreview from "./assets/nightwork-profile-preview.svg";
+import recoveryKit from "./assets/recovery-kit-preview.svg";
+import mediaArchive from "./assets/media-archive-preview.svg";
 
-type Step = "snapshot" | "connect" | "backup" | "proof";
-type View = "home" | "admin" | "proof";
+const readinessItems = [
+  { label: "プロフィール", value: "保存済み", tone: "safe" },
+  { label: "固定ポスト", value: "保存済み", tone: "safe" },
+  { label: "直近100件", value: "96件", tone: "safe" },
+  { label: "復旧用メール", value: "要確認", tone: "warn" },
+];
+
+const recoverySteps = [
+  "状況を選ぶ",
+  "復旧先を確認",
+  "プロフィールをコピー",
+  "申請文を整える",
+];
+
+const archivePosts = [
+  { tag: "反応良", title: "周年イベント告知", metric: "2.4k impressions" },
+  { tag: "自己紹介", title: "初回指名向けプロフィール", metric: "保存済み 12回" },
+  { tag: "店舗案内", title: "出勤スケジュール固定文", metric: "画像3枚" },
+];
+
+const adminRows = [
+  { name: "Rina", shop: "Club L", status: "保護中", issue: "なし", age: "3分前" },
+  { name: "Mika", shop: "Lounge S", status: "要確認", issue: "認証切れ", age: "42分放置" },
+  { name: "Aoi", shop: "Solo", status: "復旧中", issue: "凍結申請", age: "本日 02:18" },
+];
 
 export function App() {
-  const [activeStep, setActiveStep] = useState<Step>("snapshot");
-  const [activeView, setActiveView] = useState<View>("home");
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [oauth, setOauth] = useState<OAuthStartResponse | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [backupRun, setBackupRun] = useState<BackupRun | null>(null);
-  const [proof, setProof] = useState<ProofPublicPayload | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
-  const [notice, setNotice] = useState("API状態を確認中");
-
-  useEffect(() => {
-    fetchHealth()
-      .then((response) => {
-        setHealth(response);
-        setNotice("mock APIに接続済み");
-      })
-      .catch(() => {
-        setNotice("API未接続: npm run dev:api を確認");
-      });
-  }, []);
-
-  const readiness = useMemo(() => {
-    if (backupRun?.status === "completed") {
-      return 100;
-    }
-
-    if (oauth) {
-      return 72;
-    }
-
-    return health?.ok ? 48 : 18;
-  }, [backupRun?.status, health?.ok, oauth]);
-
-  async function handleConnect() {
-    setIsBusy(true);
-    setNotice("read-only OAuth URLを生成中");
-
-    try {
-      const response = await startOAuth();
-      setOauth(response);
-      setActiveStep("connect");
-      setActiveView("admin");
-      if (response.mode === "mock") {
-        const callback = await completeOAuthCallback("mock-authorization-code", response.state);
-        setSessionToken(callback.sessionToken);
-        setNotice("mock OAuthで接続済み");
-      } else {
-        setNotice("OAuth設定済み");
-      }
-    } catch {
-      setNotice("OAuth開始に失敗");
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function handleBackup() {
-    if (!sessionToken) {
-      setActiveStep("connect");
-      setNotice("先にXを安全に接続");
-      return;
-    }
-
-    setIsBusy(true);
-    setNotice("プロフィールと直近投稿をバックアップ中");
-
-    try {
-      const response = await runBackup(25, sessionToken);
-      setBackupRun(response.backupRun);
-      setProof(response.proofPayload);
-      setActiveStep("proof");
-      setActiveView("proof");
-      setNotice("証明ページDTOを作成済み");
-    } catch {
-      setNotice("バックアップに失敗");
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
   return (
     <main className="app-shell">
       <header className="top-bar">
-        <div className="brand-mark">
+        <a className="brand-mark" href="#top" aria-label="XGuard">
           <ShieldCheck aria-hidden="true" size={22} />
           <span>XGuard</span>
-        </div>
+        </a>
         <nav className="view-tabs" aria-label="Primary">
-          <ViewButton view="home" activeView={activeView} onSelect={setActiveView} icon={<LayoutDashboard size={16} />}>
-            Home
-          </ViewButton>
-          <ViewButton view="admin" activeView={activeView} onSelect={setActiveView} icon={<Settings2 size={16} />}>
-            Admin
-          </ViewButton>
-          <ViewButton view="proof" activeView={activeView} onSelect={setActiveView} icon={<FileCheck2 size={16} />}>
-            Proof
-          </ViewButton>
+          <a href="#cast-home">Cast</a>
+          <a href="#recovery">Recovery</a>
+          <a href="#admin">Admin</a>
         </nav>
         <div className="top-actions">
           <button className="icon-button" type="button" aria-label="検索">
             <Search aria-hidden="true" size={18} />
           </button>
-          <button className="icon-button" type="button" aria-label="通知">
-            <Bell aria-hidden="true" size={18} />
+          <button className="icon-button" type="button" aria-label="控えめ通知">
+            <BellOff aria-hidden="true" size={18} />
           </button>
         </div>
       </header>
 
-      <section className="workspace-grid" aria-label="XGuard wireframe workspace">
-        <section className="home-panel" aria-labelledby="hero-title" data-active={activeView === "home"}>
-          <div className="hero-copy">
-            <p className="eyebrow">Read-only X backup and proof control</p>
-            <h1 id="hero-title">
-              Xの信用資産を、<span className="no-break">静かに守る。</span>
-            </h1>
-            <p className="hero-text">
-              プロフィールと直近投稿を保全し、必要なときだけ赤入れ済みの証明ページとして共有できます。
-            </p>
-            <div className="hero-actions">
-              <button className="primary-action" type="button" onClick={handleConnect} disabled={isBusy}>
-                <KeyRound aria-hidden="true" size={18} />
-                Xを安全に接続
-              </button>
-              <button className="secondary-action" type="button" onClick={() => setActiveView("admin")}>
-                管理画面を見る
+      <section id="cast-home" className="hero-section" aria-labelledby="hero-title">
+        <div className="hero-copy">
+          <p className="eyebrow">Night-work account backup</p>
+          <h1 id="hero-title">消える前に、営業再開キットを残す。</h1>
+          <p className="hero-text">
+            Xのプロフィール、固定ポスト、直近投稿、画像をスマホで確認。困った時は数タップでコピーできる復旧用パッケージにまとめます。
+          </p>
+          <div className="hero-actions">
+            <a className="primary-action" href="#recovery">
+              <Wand2 aria-hidden="true" size={18} />
+              復旧キットを見る
+            </a>
+            <a className="secondary-action" href="#archive">
+              <Archive aria-hidden="true" size={18} />
+              保存内容を確認
+            </a>
+          </div>
+        </div>
+
+        <PhoneFrame label="キャスト用ホーム画面">
+          <div className="phone-status">
+            <span>9:41</span>
+            <span>非公開</span>
+          </div>
+          <img className="profile-image" src={profilePreview} alt="プロフィールと保存状態のプレビュー" />
+          <div className="safe-card">
+            <div>
+              <span className="status-dot" />
+              <p>現在保護中</p>
+            </div>
+            <strong>最終バックアップ 3分前</strong>
+          </div>
+          <div className="readiness-list">
+            {readinessItems.map((item) => (
+              <InfoPill key={item.label} label={item.label} value={item.value} tone={item.tone} />
+            ))}
+          </div>
+          <button className="panic-button" type="button">
+            <AlertTriangle aria-hidden="true" size={18} />
+            アカウントで困っている
+          </button>
+        </PhoneFrame>
+      </section>
+
+      <section id="recovery" className="section-grid recovery-section" aria-labelledby="recovery-title">
+        <div className="section-heading">
+          <p className="eyebrow">Recovery Wizard</p>
+          <h2 id="recovery-title">パニック時に迷わせない、1画面1判断。</h2>
+          <p>
+            技術エラーから始めず、「凍結された」「ログインできない」「乗っ取られたかも」という本人の言葉から復旧導線を開始します。
+          </p>
+        </div>
+
+        <div className="recovery-board">
+          <img className="board-image" src={recoveryKit} alt="復旧キットの画像プレビュー" />
+          <div className="step-list" aria-label="復旧ウィザードのステップ">
+            {recoverySteps.map((step, index) => (
+              <div className="step-item" key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
                 <ChevronRight aria-hidden="true" size={18} />
-              </button>
-            </div>
-          </div>
-
-          <div className="readiness-card" aria-live="polite">
-            <div className="panel-header">
-              <span>Risk Snapshot</span>
-              <span className="status-chip">{health?.xOAuthMode ?? "checking"}</span>
-            </div>
-            <div className="readiness-value">{readiness}%</div>
-            <div className="progress-track" aria-label={`バックアップ準備 ${readiness}%`}>
-              <span style={{ width: `${readiness}%` }} />
-            </div>
-            <p>{notice}</p>
-          </div>
-        </section>
-
-        <section className="admin-panel" aria-label="管理画面" data-active={activeView === "admin"}>
-          <div className="section-heading">
-            <p className="eyebrow">Admin Console</p>
-            <h2>保全オペレーション</h2>
-          </div>
-
-          <div className="admin-grid">
-            <ScreenCard
-              title="接続"
-              step="connect"
-              activeStep={activeStep}
-              icon={<ShieldCheck aria-hidden="true" size={20} />}
-              onSelect={setActiveStep}
-            >
-              <p className="screen-lead">投稿もDMも、勝手に触らない。</p>
-              <InfoRow label="許可する範囲" value={oauth ? `${oauth.scopes.length} scopes` : "3 scopes"} />
-              <ScopeList scopes={oauth?.scopes ?? ["tweet.read", "users.read", "offline.access"]} />
-              <SafetyList />
-            </ScreenCard>
-
-            <ScreenCard
-              title="Backup"
-              step="backup"
-              activeStep={activeStep}
-              icon={<DatabaseBackup aria-hidden="true" size={20} />}
-              onSelect={setActiveStep}
-            >
-              <div className="metric-line">
-                <span>{backupRun?.tweetsCaptured ?? 148}</span>
-                <strong>saved posts</strong>
               </div>
-              <InfoRow label="Profile" value={backupRun ? "保存済み" : "待機中"} />
-              <InfoRow label="API cost guard" value={formatCost(backupRun?.estimatedCostUsd ?? 0.02)} />
-              <InfoRow label="Rate limit" value={`${backupRun?.rateLimitRemaining ?? 1499} left`} />
-              <button className="primary-action full-width" type="button" onClick={handleBackup} disabled={isBusy}>
-                <RefreshCw aria-hidden="true" size={18} />
-                バックアップを実行
-              </button>
-            </ScreenCard>
-
-            <aside className="ops-panel" aria-label="運用レビュー">
-              <div className="panel-header">
-                <span>Operations</span>
-                <Activity aria-hidden="true" size={18} />
-              </div>
-              <InfoRow label="API" value={health?.ok ? "online" : "checking"} />
-              <InfoRow label="OAuth" value={oauth?.mode ?? "mock ready"} />
-              <InfoRow label="Proof privacy" value="Private default" />
-              <InfoRow label="Automation" value="No post / DM / follow" />
-            </aside>
+            ))}
           </div>
-        </section>
-
-        <section className="proof-panel" aria-label="証明レビュー" data-active={activeView === "proof"}>
-          <div className="section-heading">
-            <p className="eyebrow">Proof Review</p>
-            <h2>公開前チェック</h2>
+          <div className="copy-kit">
+            <ActionButton icon={<Copy size={17} />} label="自己紹介文をコピー" />
+            <ActionButton icon={<Download size={17} />} label="アイコンを保存" />
+            <ActionButton icon={<MessageSquareText size={17} />} label="申請文テンプレ" />
           </div>
-          <div className="proof-layout">
-            <ScreenCard
-              title="Proof"
-              step="proof"
-              activeStep={activeStep}
-              icon={<FileCheck2 aria-hidden="true" size={20} />}
-              onSelect={setActiveStep}
-            >
-              <p className="screen-lead">見せる情報を、自分で選ぶ。</p>
-              <VisibilitySelector />
-              {proof ? <ProofPreview proof={proof} /> : <EmptyProof />}
-              <button className="secondary-action full-width" type="button" disabled={!proof}>
-                <EyeOff aria-hidden="true" size={18} />
-                証明ページを失効
-              </button>
-            </ScreenCard>
+        </div>
+      </section>
 
-            <aside className="timeline-panel" aria-label="タイムライン">
-              <div className="panel-header">
-                <span>Review queue</span>
-                <Clock3 aria-hidden="true" size={18} />
-              </div>
-              <ReviewItem title="DTO redaction" value="required" />
-              <ReviewItem title="Representative posts" value={proof ? `${proof.representativeTweets.length} selected` : "waiting"} />
-              <ReviewItem title="Public state" value="private by default" />
-            </aside>
+      <section id="archive" className="section-grid archive-section" aria-labelledby="archive-title">
+        <div className="archive-preview">
+          <img src={mediaArchive} alt="保存済み投稿とメディアのアーカイブプレビュー" />
+          <div className="archive-tabs" aria-label="アーカイブ種別">
+            <span>プロフィール</span>
+            <span>投稿</span>
+            <span>メディア</span>
           </div>
-        </section>
+        </div>
+        <div className="section-heading">
+          <p className="eyebrow">Backup Archive</p>
+          <h2 id="archive-title">X風ではなく、再利用しやすい順に整理。</h2>
+          <p>
+            投稿をただ時系列で並べるだけでは、転生直後に使いづらい。自己紹介、告知、反応良、店舗案内に分けて再投稿候補を選びやすくします。
+          </p>
+          <div className="post-list">
+            {archivePosts.map((post) => (
+              <article className="post-card" key={post.title}>
+                <span>{post.tag}</span>
+                <strong>{post.title}</strong>
+                <small>{post.metric}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="trust-band" aria-label="プライバシー方針">
+        <TrustCard icon={<EyeOff size={20} />} title="通知は控えめ" text="ロック画面に夜職文脈や復旧文言を出しすぎない。" />
+        <TrustCard icon={<LockKeyhole size={20} />} title="共有前に確認" text="店舗やサポートへ渡す前に伏せ字と対象データを選ぶ。" />
+        <TrustCard icon={<UserRound size={20} />} title="本名前提にしない" text="源氏名、店舗名、SNS名を自然に扱う入力設計。" />
+      </section>
+
+      <section id="admin" className="admin-section" aria-labelledby="admin-title">
+        <div className="section-heading">
+          <p className="eyebrow">Operator Console</p>
+          <h2 id="admin-title">運営側は、高密度に要対応だけを見る。</h2>
+        </div>
+        <div className="admin-layout">
+          <MetricCard icon={<Store size={20} />} label="登録キャスト" value="128" />
+          <MetricCard icon={<RefreshCw size={20} />} label="正常同期" value="96%" />
+          <MetricCard icon={<AlertTriangle size={20} />} label="要対応" value="7" />
+          <MetricCard icon={<Building2 size={20} />} label="店舗管理" value="12" />
+        </div>
+        <div className="admin-table" role="table" aria-label="要対応ユーザー一覧">
+          <div className="admin-row header" role="row">
+            <span>Cast</span>
+            <span>Store</span>
+            <span>Status</span>
+            <span>Issue</span>
+            <span>Last sync</span>
+          </div>
+          {adminRows.map((row) => (
+            <div className="admin-row" role="row" key={`${row.name}-${row.shop}`}>
+              <strong>{row.name}</strong>
+              <span>{row.shop}</span>
+              <span>{row.status}</span>
+              <span>{row.issue}</span>
+              <span>{row.age}</span>
+            </div>
+          ))}
+        </div>
       </section>
     </main>
   );
 }
 
-interface ViewButtonProps {
-  view: View;
-  activeView: View;
-  icon: ReactNode;
-  children: ReactNode;
-  onSelect: (view: View) => void;
-}
-
-function ViewButton({ view, activeView, icon, children, onSelect }: ViewButtonProps) {
+function PhoneFrame({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <button className="view-button" type="button" aria-pressed={activeView === view} onClick={() => onSelect(view)}>
-      {icon}
-      <span>{children}</span>
-    </button>
-  );
-}
-
-interface ScreenCardProps {
-  title: string;
-  step: Step;
-  activeStep: Step;
-  icon: ReactNode;
-  children: ReactNode;
-  onSelect: (step: Step) => void;
-}
-
-function ScreenCard({ title, step, activeStep, icon, children, onSelect }: ScreenCardProps) {
-  return (
-    <article className={`screen-card ${activeStep === step ? "active" : ""}`}>
-      <button className="screen-tab" type="button" onClick={() => onSelect(step)} aria-pressed={activeStep === step}>
-        {icon}
-        <span>{title}</span>
-      </button>
-      <div className="screen-body">{children}</div>
-    </article>
-  );
-}
-
-function ScopeList({ scopes }: { scopes: string[] }) {
-  return (
-    <ul className="scope-list" aria-label="OAuth scopes">
-      {scopes.map((scope) => (
-        <li key={scope}>
-          <BadgeCheck aria-hidden="true" size={16} />
-          <span>{scope}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function SafetyList() {
-  return (
-    <div className="safety-list">
-      <InfoRow label="自動投稿" value="なし" />
-      <InfoRow label="自動DM" value="なし" />
-      <InfoRow label="自動フォロー" value="なし" />
+    <div className="phone-frame" aria-label={label}>
+      <div className="phone-screen">{children}</div>
     </div>
   );
 }
 
-function VisibilitySelector() {
+function InfoPill({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div className="segmented-control" aria-label="Proof visibility">
-      <button className="selected" type="button">
-        Private
-      </button>
-      <button type="button">Unlisted</button>
-      <button type="button">Public</button>
-    </div>
-  );
-}
-
-function ProofPreview({ proof }: { proof: ProofPublicPayload }) {
-  return (
-    <div className="proof-preview">
-      <div className="proof-identity">
-        <LockKeyhole aria-hidden="true" size={18} />
-        <div>
-          <strong>@{proof.username}</strong>
-          <span>{proof.displayName ?? "XGuard user"}</span>
-        </div>
-      </div>
-      <InfoRow label="保存投稿" value={`${proof.snapshotCounts.tweets}`} />
-      <InfoRow label="代表投稿" value={`${proof.representativeTweets.length}`} />
-      <p>{proof.representativeTweets[0]?.text ?? "No public tweet selected."}</p>
-    </div>
-  );
-}
-
-function EmptyProof() {
-  return (
-    <div className="proof-preview empty">
-      <p>バックアップを実行すると、赤入れ済みの公開用DTOがここに出ます。</p>
-    </div>
-  );
-}
-
-function ReviewItem({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="review-item">
-      <span>{title}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="info-row">
+    <div className="info-pill" data-tone={tone}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
 }
 
-function formatCost(value: number) {
-  return `$${value.toFixed(2)}`;
+function ActionButton({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <button className="kit-action" type="button">
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function TrustCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+  return (
+    <article className="trust-card">
+      {icon}
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </article>
+  );
+}
+
+function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <article className="metric-card">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
 }

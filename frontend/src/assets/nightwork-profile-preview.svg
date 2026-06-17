@@ -1,0 +1,19 @@
+<svg width="720" height="520" viewBox="0 0 720 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="XGuard profile backup preview">
+  <rect width="720" height="520" rx="28" fill="#111118"/>
+  <rect x="28" y="28" width="664" height="464" rx="24" fill="#191922"/>
+  <rect x="48" y="48" width="624" height="156" rx="20" fill="#27202C"/>
+  <path d="M48 156C130 98 205 101 273 145C351 195 434 196 521 136C578 97 629 92 672 111V204H48V156Z" fill="#D95F8D" fill-opacity=".32"/>
+  <path d="M48 119C124 90 198 100 267 151C344 207 416 204 497 151C564 108 625 105 672 125V204H48V119Z" fill="#D6B46D" fill-opacity=".42"/>
+  <circle cx="112" cy="196" r="54" fill="#111118" stroke="#D6B46D" stroke-width="8"/>
+  <circle cx="112" cy="188" r="22" fill="#F7F2EA"/>
+  <path d="M71 231C82 210 95 202 112 202C130 202 145 211 155 232C143 244 129 250 112 250C95 250 82 244 71 231Z" fill="#F7F2EA"/>
+  <rect x="48" y="276" width="262" height="20" rx="10" fill="#F7F2EA"/>
+  <rect x="48" y="310" width="142" height="14" rx="7" fill="#B4ACB5"/>
+  <rect x="48" y="350" width="580" height="14" rx="7" fill="#B4ACB5" fill-opacity=".72"/>
+  <rect x="48" y="376" width="506" height="14" rx="7" fill="#B4ACB5" fill-opacity=".72"/>
+  <rect x="48" y="430" width="142" height="42" rx="21" fill="#D6B46D"/>
+  <rect x="208" y="430" width="128" height="42" rx="21" fill="#24242E" stroke="#3B3B48"/>
+  <rect x="500" y="240" width="128" height="36" rx="18" fill="#16301F" stroke="#72D391" stroke-opacity=".5"/>
+  <circle cx="526" cy="258" r="6" fill="#72D391"/>
+  <rect x="542" y="251" width="64" height="14" rx="7" fill="#72D391"/>
+</svg>
