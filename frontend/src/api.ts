@@ -1,4 +1,4 @@
-import type { BackupRun, ProofPublicPayload } from "../../shared/types";
+import type { BackupRun, ProofPageVisibility, ProofPublicPayload } from "../../shared/types";
 
 export interface HealthResponse {
   ok: boolean;
@@ -33,6 +33,12 @@ export interface BackupRunResponse {
   proofPayload: ProofPublicPayload;
 }
 
+export interface ProofVisibilityResponse {
+  runId: string;
+  visibility: ProofPageVisibility;
+  revokedAt: string | null;
+}
+
 const apiBaseUrl = import.meta.env.VITE_XGUARD_API_BASE_URL ?? "";
 
 export async function fetchHealth(): Promise<HealthResponse> {
@@ -57,6 +63,39 @@ export async function runBackup(tweetLimit: number, sessionToken: string): Promi
     },
     body: JSON.stringify({ tweetLimit }),
   });
+}
+
+export async function fetchBackupStatus(runId: string, sessionToken: string): Promise<BackupRun> {
+  return requestJson<BackupRun>(`/api/backup/status/${runId}`, {
+    headers: authHeaders(sessionToken),
+  });
+}
+
+export async function updateProofVisibility(
+  runId: string,
+  visibility: Extract<ProofPageVisibility, "unlisted" | "public" | "revoked">,
+  sessionToken: string,
+): Promise<ProofVisibilityResponse> {
+  return requestJson<ProofVisibilityResponse>(`/api/recovery/${runId}/proof/visibility`, {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(sessionToken),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ visibility }),
+  });
+}
+
+export async function fetchProofPayload(runId: string, sessionToken: string): Promise<ProofPublicPayload> {
+  return requestJson<ProofPublicPayload>(`/api/recovery/${runId}/proof`, {
+    headers: authHeaders(sessionToken),
+  });
+}
+
+function authHeaders(sessionToken: string): HeadersInit {
+  return {
+    authorization: `Bearer ${sessionToken}`,
+  };
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {

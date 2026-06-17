@@ -8,11 +8,13 @@ XGuard は read-only recovery preparation service である。implementation rep
 
 ```text
 backend/   Express API、repository boundaries、backup/proof services、usage ledger
+frontend/  Vite + React の cast recovery UI、mock OAuth から backup/proof までの操作画面
 shared/    frontend と backend で共有する DTOs
+supabase/  auth profile、X backup、proof page、compliance、Stripe event の初期schema
 docs/      implementation contracts と deployment notes
 ```
 
-frontend と Supabase-backed persistence layer はまだ計画段階である。現在の backend prototype は意図的に fixture-backed にしており、live X API calls や paid usage を導入する前に API boundary を review できるようにしている。
+現在の prototype は fixture-backed な backend と API 接続済み frontend で、mock OAuth、backup run、proof visibility、redacted proof DTO 取得までをローカルで確認できる。Supabase-backed persistence layer と live X API adapter はまだ production replacement 境界であり、live API calls や paid usage を導入する前に repository boundary と cost guardrails を review できるようにしている。
 
 ## v0 Request Flow
 

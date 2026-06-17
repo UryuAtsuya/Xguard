@@ -121,7 +121,7 @@ npm run check
 - `npm run build:web`
 - `npm run test`
 
-2026-06-16 の確認時点では `npm run check` は成功し、`9 passed | 1 skipped`、`75 passed | 2 skipped` だった。
+2026-06-17 の確認時点では `npm run check` は成功し、`9 passed | 1 skipped`、`76 passed | 2 skipped` だった。
 
 ## 6. 終了
 
