@@ -27,18 +27,18 @@ describe("App", () => {
   it("shows the night-work cast recovery mockup", () => {
     render(<App />);
 
-    expect(screen.getByText("消える前に、営業再開キットを残す。")).toBeInTheDocument();
-    expect(screen.getByText("復旧キットを見る")).toBeInTheDocument();
-    expect(screen.getByText("アカウントで困っている")).toBeInTheDocument();
+    expect(screen.getByText("消える前に、証明を残す。")).toBeInTheDocument();
+    expect(screen.getAllByText("Xを安全に接続")[0]).toBeInTheDocument();
+    expect(screen.getByText("Xが止まった時の準備を見る")).toBeInTheDocument();
     expect(screen.getByAltText("プロフィールと保存状態のプレビュー")).toBeInTheDocument();
   });
 
   it("shows the live prototype flow controls", async () => {
     render(<App />);
 
-    expect(screen.getByText("実 API で backup と proof まで確認する。")).toBeInTheDocument();
-    expect(screen.getByText("Read-only X 接続")).toBeInTheDocument();
-    expect(screen.getByText("Backup 実行").closest("button")).toBeDisabled();
+    expect(screen.getByText("出勤前に、Xの営業資産を静かに守る。")).toBeInTheDocument();
+    expect(screen.getAllByText("Xを安全に接続")[0]).toBeInTheDocument();
+    expect(screen.getByText("今すぐ保存").closest("button")).toBeDisabled();
 
     await waitFor(() => {
       expect(screen.getByText("prototype / OAuth mock")).toBeInTheDocument();
@@ -129,17 +129,17 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.click(getButtonByText("Read-only X 接続"));
+    fireEvent.click(getButtonByText("Xを安全に接続"));
     await waitFor(() => {
       expect(screen.getByText("X 接続済み")).toBeInTheDocument();
     });
 
-    fireEvent.click(getButtonByText("Backup 実行"));
+    fireEvent.click(getButtonByText("今すぐ保存"));
     await waitFor(() => {
-      expect(screen.getByText("2 posts")).toBeInTheDocument();
+      expect(screen.getAllByText("2件保存")[0]).toBeInTheDocument();
     });
 
-    fireEvent.click(getButtonByText("Proof 公開"));
+    fireEvent.click(getButtonByText("共有範囲を選ぶ"));
     await waitFor(() => {
       expect(screen.getByText("XGuard proof preview")).toBeInTheDocument();
     });
@@ -149,16 +149,19 @@ describe("App", () => {
   it("includes archive and operator surfaces for design review", () => {
     render(<App />);
 
-    expect(screen.getByText("X風ではなく、再利用しやすい順に整理。")).toBeInTheDocument();
+    expect(screen.getByText("再投稿しやすい順に、営業の控えを並べる。")).toBeInTheDocument();
     expect(screen.getByText("運営側は、高密度に要対応だけを見る。")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "要対応ユーザー一覧" })).toBeInTheDocument();
   });
 });
 
 function getButtonByText(text: string): HTMLButtonElement {
-  const button = screen.getByText(text).closest("button");
+  const button = screen
+    .getAllByText(text)
+    .map((element) => element.closest("button"))
+    .find((element): element is HTMLButtonElement => element instanceof HTMLButtonElement);
 
-  if (!(button instanceof HTMLButtonElement)) {
+  if (!button) {
     throw new Error(`button_not_found:${text}`);
   }
 

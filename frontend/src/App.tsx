@@ -36,9 +36,9 @@ export function App() {
           <span>XGuard</span>
         </a>
         <nav className="view-tabs" aria-label="Primary">
-          <a href="#cast-home">Cast</a>
-          <a href="#recovery">Recovery</a>
-          <a href="#admin">Admin</a>
+          <a href="#cast-home">ホーム</a>
+          <a href="#prototype">保存チェック</a>
+          <a href="#recovery">復旧キット</a>
         </nav>
         <div className="top-actions">
           <button className="icon-button" type="button" aria-label="検索">
@@ -50,8 +50,8 @@ export function App() {
         </div>
       </header>
 
-      <PrototypeConsole />
       <LandingPage />
+      <PrototypeConsole />
       <AdminConsole />
     </main>
   );
@@ -106,9 +106,9 @@ function PrototypeConsole() {
   const progressItems = useMemo(
     () => [
       { label: "API", value: health?.ok ? "起動中" : "未確認", tone: health?.ok ? "safe" : "muted" },
-      { label: "OAuth", value: session ? "接続済み" : "未接続", tone: session ? "safe" : "muted" },
-      { label: "Backup", value: latestRun?.status ?? "未実行", tone: latestRun?.status === "completed" ? "safe" : "muted" },
-      { label: "Proof", value: visibility, tone: visibility === "private" ? "warn" : visibility === "revoked" ? "danger" : "safe" },
+      { label: "接続", value: session ? "接続済み" : "未接続", tone: session ? "safe" : "muted" },
+      { label: "保存", value: latestRun ? formatBackupStatus(latestRun.status) : "未実行", tone: latestRun?.status === "completed" ? "safe" : "muted" },
+      { label: "証明", value: formatProofVisibility(visibility), tone: visibility === "private" ? "warn" : visibility === "revoked" ? "danger" : "safe" },
     ],
     [health?.ok, latestRun?.status, session, visibility],
   );
@@ -202,13 +202,18 @@ function PrototypeConsole() {
   }
 
   return (
-    <section className="prototype-console" aria-labelledby="prototype-title">
+    <section id="prototype" className="prototype-console" aria-labelledby="prototype-title">
       <div className="prototype-heading">
-        <p className="eyebrow">Live Prototype</p>
-        <h2 id="prototype-title">実 API で backup と proof まで確認する。</h2>
+        <p className="eyebrow">Tonight's safety check</p>
+        <h2 id="prototype-title">出勤前に、Xの営業資産を静かに守る。</h2>
         <p>
-          Mock OAuth では接続から proof DTO 取得までこの画面で完結します。Configured OAuth は X の認可画面へ遷移します。
+          源氏名、プロフィール、直近投稿を読み取り専用で保存。証明ページは非公開から始まり、共有前に自分で公開と失効を選べます。
         </p>
+        <div className="discretion-list" aria-label="安全方針">
+          <span>DMしない</span>
+          <span>投稿しない</span>
+          <span>フォロー操作なし</span>
+        </div>
       </div>
 
       <div className="prototype-panel">
@@ -224,23 +229,23 @@ function PrototypeConsole() {
         <div className="flow-actions">
           <button type="button" onClick={handleConnect} disabled={Boolean(busyAction) || Boolean(session)}>
             {busyAction === "connect" ? <Loader2 aria-hidden="true" size={18} /> : <ShieldCheck aria-hidden="true" size={18} />}
-            <span>{session ? "X 接続済み" : "Read-only X 接続"}</span>
+            <span>{session ? "X 接続済み" : "Xを安全に接続"}</span>
           </button>
           <button type="button" onClick={handleBackup} disabled={Boolean(busyAction) || !session}>
             {busyAction === "backup" ? <Loader2 aria-hidden="true" size={18} /> : <Play aria-hidden="true" size={18} />}
-            <span>Backup 実行</span>
+            <span>今すぐ保存</span>
           </button>
           <button type="button" onClick={handleRefreshStatus} disabled={Boolean(busyAction) || !latestRun}>
             <RotateCw aria-hidden="true" size={18} />
-            <span>Status 更新</span>
+            <span>状態を更新</span>
           </button>
           <button type="button" onClick={() => handleVisibility("public")} disabled={Boolean(busyAction) || !latestRun || visibility === "revoked"}>
             <Eye aria-hidden="true" size={18} />
-            <span>Proof 公開</span>
+            <span>共有範囲を選ぶ</span>
           </button>
           <button type="button" onClick={() => handleVisibility("revoked")} disabled={Boolean(busyAction) || !latestRun || visibility === "revoked"}>
             <EyeOff aria-hidden="true" size={18} />
-            <span>Proof 失効</span>
+            <span>公開を止める</span>
           </button>
         </div>
 
@@ -258,28 +263,28 @@ function PrototypeConsole() {
 
         <div className="flow-grid">
           <article>
-            <span>Connected account</span>
+            <span>接続アカウント</span>
             <strong>{session ? `@${session.connectedAccount.username}` : "未接続"}</strong>
-            <small>{session?.tokenStorage ?? "token refs only, raw token hidden"}</small>
+            <small>{session ? "読み取り専用で接続済み" : "raw token は画面に出しません"}</small>
           </article>
           <article>
-            <span>Latest backup</span>
-            <strong>{latestRun ? `${latestRun.tweetsCaptured} posts` : "未実行"}</strong>
-            <small>{latestRun ? `${latestRun.status} / ${latestRun.createdAt}` : "mock flow ready"}</small>
+            <span>保存状況</span>
+            <strong>{latestRun ? `${latestRun.tweetsCaptured}件保存` : "未実行"}</strong>
+            <small>{latestRun ? `${formatBackupStatus(latestRun.status)} / ${latestRun.createdAt}` : "出勤前チェック待ち"}</small>
           </article>
           <article>
-            <span>Proof visibility</span>
-            <strong>{visibility}</strong>
-            <small>{revokedAt ? `revoked at ${revokedAt}` : "private by default"}</small>
+            <span>証明ページ</span>
+            <strong>{formatProofVisibility(visibility)}</strong>
+            <small>{revokedAt ? `停止日時 ${revokedAt}` : "最初は非公開"}</small>
           </article>
         </div>
       </div>
 
-      <div className="proof-panel" aria-label="Proof preview">
+      <div className="proof-panel" aria-label="証明プレビュー">
         <div>
-          <span>Proof DTO</span>
+          <span>証明プレビュー</span>
           <strong>{proof ? `@${proof.username}` : "公開前または失効済み"}</strong>
-          <small>{proof ? `${proof.snapshotCounts.tweets} snapshots / ${proof.redactionPolicyVersion}` : "raw X payload は表示しません"}</small>
+          <small>{proof ? `${proof.snapshotCounts.tweets}件の保存データ / ${proof.redactionPolicyVersion}` : "共有前に伏せ字と公開状態を確認します"}</small>
         </div>
         {proof ? (
           <ul>
@@ -302,7 +307,7 @@ function PrototypeConsole() {
             ) : (
               <li>
                 <span>Waiting</span>
-                <p>API health check を実行中です。</p>
+                <p>営業アカウントの保存状態を確認中です。</p>
               </li>
             )}
           </ol>
@@ -319,22 +324,39 @@ function appendActivity(update: (value: SetStateAction<ActivityEntry[]>) => void
 function getStepMessage(step: FlowStep): string {
   switch (step) {
     case "checking":
-      return "Read-only OAuth を確認中です。";
+      return "読み取り専用の接続を確認中です。";
     case "connected":
-      return "接続済みです。次に backup を実行できます。";
+      return "接続済みです。次にプロフィールと投稿を保存できます。";
     case "backed-up":
-      return "Backup 完了。Proof は private のまま保持されています。";
+      return "保存完了。証明ページはまだ非公開です。";
     case "proof-ready":
-      return "Redacted proof DTO を取得しました。";
+      return "共有用の証明プレビューを表示しました。";
     case "revoked":
-      return "Proof は失効済みです。再公開は拒否されます。";
+      return "証明ページは停止済みです。再公開はできません。";
     case "error":
       return "操作に失敗しました。";
     default:
-      return "Mock mode ならこの画面だけで smoke flow を完了できます。";
+      return "Xに投稿せず、DMにも触れず、営業再開に必要な控えだけを残します。";
   }
 }
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown_error";
+}
+
+function formatBackupStatus(status: string): string {
+  return status === "completed" ? "保存完了" : status;
+}
+
+function formatProofVisibility(visibility: ProofPageVisibility): string {
+  switch (visibility) {
+    case "private":
+      return "非公開";
+    case "unlisted":
+      return "限定公開";
+    case "public":
+      return "公開中";
+    case "revoked":
+      return "停止済み";
+  }
 }
