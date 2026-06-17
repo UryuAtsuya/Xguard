@@ -30,7 +30,6 @@ export interface OAuthCallbackResponse {
 
 export interface BackupRunResponse {
   backupRun: BackupRun;
-  proofPayload: ProofPublicPayload;
 }
 
 export interface ProofVisibilityResponse {

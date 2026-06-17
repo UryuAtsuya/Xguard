@@ -13,8 +13,8 @@
 | GET | `/health` | API health check | なし | なし |
 | GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata と一回限り `state` / S256 PKCE `code_challenge` を返す | なし | なし |
 | GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化され、専用header tokenが一致した場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | `x-xguard-diagnostic-token` header | なし |
-| GET | `/api/x/oauth/callback` | callback shape、`state`、TTL、replay を検証し、repository interface に token references を保存する | OAuth `state` | なし |
-| POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する。作成された proof は初期 `private` として扱う | `Authorization: Bearer <sessionToken>` | なし |
+| GET | `/api/x/oauth/callback` | callback shape、`state`、TTL、replay を検証する。mock mode のみ prototype token refs / session を発行し、configured mode は実token exchange実装まで501で停止する | OAuth `state` | なし |
+| POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する。応答は `backupRun` summary のみで、作成された proof は初期 `private` として扱う | `Authorization: Bearer <sessionToken>` | なし |
 | GET | `/api/backup/status/:runId` | mock backup status を owner のみ読む | `Authorization: Bearer <sessionToken>` | なし |
 | PATCH | `/api/recovery/:runId/proof/visibility` | owner のみ proof visibility を `unlisted` / `public` / `revoked` に更新する。初期 `private` からの公開/取消を扱い、revoked 後の再公開は409 | `Authorization: Bearer <sessionToken>` | なし |
 | GET | `/api/recovery/:runId/proof` | owner preview 用に mock backup の redacted proof DTO を `public` / `unlisted` 相当で返す。`private` / revoked は404 | `Authorization: Bearer <sessionToken>` | なし |
@@ -29,7 +29,9 @@
 
 `GET /api/x/oauth/start` は `state` と S256 PKCE `code_challenge` を発行し、`state`、`code_verifier`、有効期限を backend の `OAuthStateRepository` に保存する。`code_verifier` は response body や frontend へ返さない。response には `authorizationUrl`、`scopes`、`state`、`codeChallenge`、`codeChallengeMethod`、`stateExpiresAt`、`mode`、`callbackUrl`、`writesEnabled` を返す。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、`code_challenge_method` は `S256` に固定する。
 
-`GET /api/x/oauth/callback` は `code` と `state` を必須にする。保存済み `state` が存在しない、別の値、または replay の場合は `403 { "error": "invalid_oauth_state" }` を返す。TTL 超過後の callback は `403 { "error": "expired_oauth_state" }` を返す。正常時は `state` を一回で消費し、保存していた `code_verifier` を token exchange boundary へ渡してから token repository boundary へ進む。現prototypeでは外部X token endpointをまだ呼ばず、非productionのprototype検証でのみrepository refを生成する。`NODE_ENV=production` かつ configured mode の callback では prototype token refs / session を発行せず、`501 { "error": "x_oauth_token_exchange_not_implemented" }` を返す。API response には token material と `code_verifier` を返さない。TTL は `OAUTH_STATE_TTL_SECONDS` で変更でき、既定値は300秒である。PKCE verifier byte length は `OAUTH_PKCE_VERIFIER_BYTES` で変更でき、既定値は64 bytes、許可範囲は32から96 bytesである。
+`GET /api/x/oauth/callback` は `code` と `state` を必須にする。保存済み `state` が存在しない、別の値、または replay の場合は `403 { "error": "invalid_oauth_state" }` を返す。TTL 超過後の callback は `403 { "error": "expired_oauth_state" }` を返す。正常時は `state` を一回で消費し、保存していた `code_verifier` を token exchange boundary へ渡してから token repository boundary へ進む。現prototypeでは外部X token endpointをまだ呼ばず、mock mode のみ repository ref と session を生成する。configured mode の callback は環境名に関係なく、実token exchangeが入るまで prototype token refs / session を発行せず、`501 { "error": "x_oauth_token_exchange_not_implemented" }` を返す。API response には token material と `code_verifier` を返さない。TTL は `OAUTH_STATE_TTL_SECONDS` で変更でき、既定値は300秒である。PKCE verifier byte length は `OAUTH_PKCE_VERIFIER_BYTES` で変更でき、既定値は64 bytes、許可範囲は32から96 bytesである。
+
+`/api/x/oauth/callback`、`/api/backup/*`、`/api/recovery/*` は session、backup、proof payload を扱うため、すべて `Cache-Control: no-store` を返す。
 
 現在の `OAuthStateRepository` は in-memory prototype で、`save` 時に期限切れrecordを掃除する。本番deployでは callback が別process / 別instanceへ届く可能性があるため、同じ一回限り消費・TTL・replay拒否契約を持つ共有永続storeへ置き換える。
 

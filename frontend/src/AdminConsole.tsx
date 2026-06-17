@@ -22,19 +22,19 @@ export function AdminConsole() {
       </div>
       <div className="admin-table" role="table" aria-label="要対応ユーザー一覧">
         <div className="admin-row header" role="row">
-          <span>Cast</span>
-          <span>Store</span>
-          <span>Status</span>
-          <span>Issue</span>
-          <span>Last sync</span>
+          <span role="columnheader">Cast</span>
+          <span role="columnheader">Store</span>
+          <span role="columnheader">Status</span>
+          <span role="columnheader">Issue</span>
+          <span role="columnheader">Last sync</span>
         </div>
         {adminRows.map((row) => (
           <div className="admin-row" role="row" key={`${row.name}-${row.shop}`}>
-            <strong>{row.name}</strong>
-            <span>{row.shop}</span>
-            <span>{row.status}</span>
-            <span>{row.issue}</span>
-            <span>{row.age}</span>
+            <strong role="cell">{row.name}</strong>
+            <span role="cell">{row.shop}</span>
+            <span role="cell">{row.status}</span>
+            <span role="cell">{row.issue}</span>
+            <span role="cell">{row.age}</span>
           </div>
         ))}
       </div>

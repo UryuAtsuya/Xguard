@@ -2,10 +2,10 @@ import cors, { type CorsOptions } from "cors";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import type { ProofPageVisibility } from "../../shared/types.js";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
+import { InMemoryBackupProofRepository } from "./repositories/backupProofRepository.js";
 import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
@@ -85,16 +85,6 @@ export function buildOAuthStartResponse(
 
 export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
-type BackupRunResult = Awaited<ReturnType<MockBackupService["runBackup"]>>;
-
-export interface BackupRunEntry {
-  userId: string;
-  visibility: ProofPageVisibility;
-  revokedAt: string | null;
-  backupRun: BackupRunResult["backupRun"];
-  proofPayload: BackupRunResult["proofPayload"];
-}
-
 export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
   if (!config.corsAllowedOrigins) {
     return {};
@@ -114,14 +104,14 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   const tokenRepository = new InMemoryTokenRepository();
   const oauthStateRepository = new InMemoryOAuthStateRepository();
   const sessionRepository = new InMemorySessionRepository();
+  const backupProofRepository = new InMemoryBackupProofRepository();
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
-  const backupRuns = new Map<string, BackupRunEntry>();
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
   app.locals.sessionRepository = sessionRepository;
-  app.locals.backupRuns = backupRuns;
+  app.locals.backupProofRepository = backupProofRepository;
 
   app.get("/health", (_request, response) => {
     response.json({
@@ -160,6 +150,8 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   });
 
   app.get("/api/x/oauth/callback", async (request, response) => {
+    setNoStore(response);
+
     const query = z.object({ code: z.string().min(1), state: z.string().min(1) }).safeParse(request.query);
 
     if (!query.success) {
@@ -200,6 +192,8 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   });
 
   app.post("/api/backup/run", requireAuth(sessionRepository), async (request, response) => {
+    setNoStore(response);
+
     const body = z.object({ tweetLimit: z.number().int().min(1).max(100).default(25) }).safeParse(request.body ?? {});
 
     if (!body.success) {
@@ -208,17 +202,19 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     }
 
     const result = await backupService.runBackup(body.data.tweetLimit);
-    backupRuns.set(result.backupRun.id, {
+    await backupProofRepository.saveBackupProof({
       userId: getAuthenticatedUserId(request),
       visibility: "private",
       revokedAt: null,
       ...result,
     });
-    response.status(201).json(result);
+    response.status(201).json({ backupRun: result.backupRun });
   });
 
-  app.get("/api/backup/status/:runId", requireAuth(sessionRepository), (request, response) => {
-    const entry = backupRuns.get(getStringParam(request, "runId"));
+  app.get("/api/backup/status/:runId", requireAuth(sessionRepository), async (request, response) => {
+    setNoStore(response);
+
+    const entry = await backupProofRepository.findBackupProof(getStringParam(request, "runId"));
 
     if (!entry) {
       response.status(404).json({ error: "backup_run_not_found" });
@@ -233,7 +229,9 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     response.json(entry.backupRun);
   });
 
-  app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), (request, response) => {
+  app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), async (request, response) => {
+    setNoStore(response);
+
     const body = z.object({ visibility: z.enum(["unlisted", "public", "revoked"]) }).safeParse(request.body ?? {});
 
     if (!body.success) {
@@ -242,7 +240,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     }
 
     const runId = getStringParam(request, "runId");
-    const entry = backupRuns.get(runId);
+    const entry = await backupProofRepository.findBackupProof(runId);
 
     if (!entry) {
       response.status(404).json({ error: "proof_payload_not_found" });
@@ -259,12 +257,12 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
       return;
     }
 
-    const updatedEntry: BackupRunEntry = {
+    const updatedEntry = {
       ...entry,
       visibility: body.data.visibility,
       revokedAt: body.data.visibility === "revoked" ? entry.revokedAt ?? new Date().toISOString() : null,
     };
-    backupRuns.set(runId, updatedEntry);
+    await backupProofRepository.saveBackupProof(updatedEntry);
 
     response.json({
       runId,
@@ -273,8 +271,10 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
     });
   });
 
-  app.get("/api/recovery/:runId/proof", requireAuth(sessionRepository), (request, response) => {
-    const entry = backupRuns.get(getStringParam(request, "runId"));
+  app.get("/api/recovery/:runId/proof", requireAuth(sessionRepository), async (request, response) => {
+    setNoStore(response);
+
+    const entry = await backupProofRepository.findBackupProof(getStringParam(request, "runId"));
 
     if (!entry) {
       response.status(404).json({ error: "proof_payload_not_found" });
@@ -348,6 +348,10 @@ function matchesToken(expected: string | undefined, actual: string | undefined):
   return timingSafeEqual(expectedDigest, actualDigest);
 }
 
+function setNoStore(response: Response): void {
+  response.set("Cache-Control", "no-store");
+}
+
 function buildPrototypeOAuthTokenRefs(code: string, codeVerifier: string) {
   const tokenRefSeed = createHash("sha256").update(`${code}:${codeVerifier}`).digest("hex").slice(0, 24);
 
@@ -358,5 +362,5 @@ function buildPrototypeOAuthTokenRefs(code: string, codeVerifier: string) {
 }
 
 function requiresRealOAuthTokenExchange(config: RuntimeConfig): boolean {
-  return config.nodeEnv === "production" && config.xOAuth.mode === "configured";
+  return config.xOAuth.mode === "configured";
 }

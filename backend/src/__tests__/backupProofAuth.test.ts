@@ -44,7 +44,11 @@ describe("backup and proof auth boundary", () => {
     });
 
     expect(backupResponse.statusCode).toBe(201);
+    expect(backupResponse.headers["cache-control"]).toBe("no-store");
+    expect(JSON.stringify(backupResponse.body)).not.toContain("representativeTweets");
+    expect(JSON.stringify(backupResponse.body)).not.toContain("proofPayload");
     expect(statusResponse.statusCode).toBeUndefined();
+    expect(statusResponse.headers["cache-control"]).toBe("no-store");
   });
 
   it("keeps proof payload private by default", async () => {
@@ -77,7 +81,9 @@ describe("backup and proof auth boundary", () => {
 
     expect(visibilityResponse.statusCode).toBeUndefined();
     expect(visibilityResponse.body).toMatchObject({ runId, visibility: "public", revokedAt: null });
+    expect(visibilityResponse.headers["cache-control"]).toBe("no-store");
     expect(proofResponse.statusCode).toBeUndefined();
+    expect(proofResponse.headers["cache-control"]).toBe("no-store");
     expect(JSON.stringify(proofResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(proofResponse.body)).not.toContain("accessToken");
     expect(JSON.stringify(proofResponse.body)).not.toContain("refreshToken");

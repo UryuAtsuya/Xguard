@@ -81,7 +81,7 @@ describe("XGuard API prototype", () => {
     expect(JSON.stringify(response)).not.toContain("code_verifier");
   });
 
-  it("stores a one-time configured OAuth state with S256 PKCE and rejects replayed callbacks", async () => {
+  it("stores a one-time configured OAuth state with S256 PKCE and blocks prototype callbacks", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "test",
       APP_BASE_URL: "https://xguard.example.com",
@@ -111,11 +111,9 @@ describe("XGuard API prototype", () => {
       acceptedCallbackResponse,
     );
 
-    expect(acceptedCallbackResponse.statusCode).toBeUndefined();
-    expect(acceptedCallbackResponse.body).toMatchObject({
-      tokenStorage: "repository-ref-only",
-      writesEnabled: false,
-    });
+    expect(acceptedCallbackResponse.statusCode).toBe(501);
+    expect(acceptedCallbackResponse.body).toEqual({ error: "x_oauth_token_exchange_not_implemented" });
+    expect(acceptedCallbackResponse.headers["cache-control"]).toBe("no-store");
 
     const replayedCallbackResponse = createRouteResponseRecorder();
     await callbackRoute.stack[0].handle(
@@ -177,7 +175,7 @@ describe("XGuard API prototype", () => {
     }
   });
 
-  it("does not issue prototype token refs for configured OAuth callbacks in production", async () => {
+  it("does not issue prototype token refs for configured OAuth callbacks", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
       ...productionConfirmations,
@@ -200,6 +198,7 @@ describe("XGuard API prototype", () => {
 
     expect(callbackResponse.statusCode).toBe(501);
     expect(callbackResponse.body).toEqual({ error: "x_oauth_token_exchange_not_implemented" });
+    expect(callbackResponse.headers["cache-control"]).toBe("no-store");
     expect(JSON.stringify(callbackResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(callbackResponse.body)).not.toContain("sessionToken");
     expect(await app.locals.sessionRepository.lookup("authorization-code")).toBeUndefined();
