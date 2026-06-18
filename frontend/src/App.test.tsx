@@ -4,6 +4,7 @@ import { App } from "./App";
 
 describe("App", () => {
   beforeEach(() => {
+    window.history.pushState({}, "", "/");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -146,12 +147,33 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/backup/run", expect.any(Object));
   });
 
-  it("includes archive and operator surfaces for design review", () => {
+  it("keeps the operator surface out of the cast page", () => {
     render(<App />);
 
     expect(screen.getByText("再投稿しやすい順に、営業の控えを並べる。")).toBeInTheDocument();
+    expect(screen.queryByText("運営側は、高密度に要対応だけを見る。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "要対応ユーザー一覧" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "運営" })).not.toBeInTheDocument();
+  });
+
+  it("uses the cast page for non-admin paths", () => {
+    window.history.pushState({}, "", "/cast");
+
+    render(<App />);
+
+    expect(screen.getByText("消える前に、証明を残す。")).toBeInTheDocument();
+    expect(screen.queryByText("運営側は、高密度に要対応だけを見る。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "運営" })).not.toBeInTheDocument();
+  });
+
+  it.each(["/admin", "/admin/"])("renders the operator console only on %s", (path) => {
+    window.history.pushState({}, "", path);
+
+    render(<App />);
+
     expect(screen.getByText("運営側は、高密度に要対応だけを見る。")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "要対応ユーザー一覧" })).toBeInTheDocument();
+    expect(screen.queryByText("消える前に、証明を残す。")).not.toBeInTheDocument();
   });
 });
 

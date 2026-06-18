@@ -28,32 +28,63 @@ import {
 import type { ProofPageVisibility, ProofPublicPayload } from "../../shared/types";
 
 export function App() {
-  return (
-    <main className="app-shell">
-      <header className="top-bar">
-        <a className="brand-mark" href="#top" aria-label="XGuard">
-          <ShieldCheck aria-hidden="true" size={22} />
-          <span>XGuard</span>
-        </a>
-        <nav className="view-tabs" aria-label="Primary">
-          <a href="#cast-home">ホーム</a>
-          <a href="#prototype">保存チェック</a>
-          <a href="#recovery">復旧キット</a>
-        </nav>
-        <div className="top-actions">
-          <button className="icon-button" type="button" aria-label="検索">
-            <Search aria-hidden="true" size={18} />
-          </button>
-          <button className="icon-button" type="button" aria-label="控えめ通知">
-            <BellOff aria-hidden="true" size={18} />
-          </button>
-        </div>
-      </header>
+  const isAdminRoute = getRoutePath() === "/admin";
 
+  if (isAdminRoute) {
+    return (
+      <main className="app-shell" data-surface="admin">
+        <Header surface="admin" />
+        <AdminConsole />
+      </main>
+    );
+  }
+
+  return (
+    <main className="app-shell" data-surface="cast">
+      <Header surface="cast" />
       <LandingPage />
       <PrototypeConsole />
-      <AdminConsole />
     </main>
+  );
+}
+
+function getRoutePath() {
+  const path = window.location.pathname.replace(/\/+$/, "");
+  return path === "" ? "/" : path;
+}
+
+function Header({ surface }: { surface: "cast" | "admin" }) {
+  const isAdmin = surface === "admin";
+
+  return (
+    <header className="top-bar">
+      <a className="brand-mark" href={isAdmin ? "/admin" : "#top"} aria-label="XGuard">
+        <ShieldCheck aria-hidden="true" size={22} />
+        <span>XGuard</span>
+      </a>
+      <nav className="view-tabs" aria-label={isAdmin ? "Admin" : "Primary"}>
+        {isAdmin ? (
+          <>
+            <a href="/admin">運営</a>
+            <a href="/">ユーザー画面</a>
+          </>
+        ) : (
+          <>
+            <a href="#cast-home">ホーム</a>
+            <a href="#prototype">保存チェック</a>
+            <a href="#recovery">復旧キット</a>
+          </>
+        )}
+      </nav>
+      <div className="top-actions">
+        <button className="icon-button" type="button" aria-label="検索">
+          <Search aria-hidden="true" size={18} />
+        </button>
+        <button className="icon-button" type="button" aria-label="控えめ通知">
+          <BellOff aria-hidden="true" size={18} />
+        </button>
+      </div>
+    </header>
   );
 }
 
