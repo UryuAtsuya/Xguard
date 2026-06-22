@@ -11,6 +11,10 @@ import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
 import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
 import { MockBackupService } from "./services/mockBackupService.js";
+import {
+  createDefaultXOAuthTokenExchangeService,
+  type XOAuthTokenExchangeService,
+} from "./services/xOAuthTokenExchangeService.js";
 
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
@@ -106,6 +110,10 @@ export interface ProofPageComplianceEvent {
   recordedAt: string;
 }
 
+export interface CreateAppOptions {
+  xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
+}
+
 export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
   if (!config.corsAllowedOrigins) {
     return {};
@@ -120,11 +128,13 @@ export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()):
   };
 }
 
-export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
+export function createApp(config: RuntimeConfig = createRuntimeConfig(), options: CreateAppOptions = {}) {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
   const oauthStateRepository = new InMemoryOAuthStateRepository();
   const sessionRepository = new InMemorySessionRepository();
+  const xOAuthTokenExchangeService =
+    options.xOAuthTokenExchangeService ?? createDefaultXOAuthTokenExchangeService(config);
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, BackupRunEntry>();
@@ -133,6 +143,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
   app.locals.sessionRepository = sessionRepository;
+  app.locals.tokenRepository = tokenRepository;
   app.locals.backupRuns = backupRuns;
   app.locals.proofPageComplianceEvents = proofPageComplianceEvents;
 
@@ -189,23 +200,25 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig()) {
       return;
     }
 
-    if (requiresRealOAuthTokenExchange(config)) {
+    const exchange = await xOAuthTokenExchangeService.exchange({
+      code: query.data.code,
+      codeVerifier: state.record.codeVerifier,
+      callbackUrl: config.xOAuth.callbackUrl,
+      scopes: V0_READ_ONLY_OAUTH_SCOPES,
+    });
+
+    if (!exchange.ok) {
       response.status(501).json({ error: "x_oauth_token_exchange_not_implemented" });
       return;
     }
 
-    await tokenRepository.saveXToken({
-      xAccountId: fixtureAccount.id,
-      provider: "x",
-      scope: [...V0_READ_ONLY_OAUTH_SCOPES],
-      ...buildPrototypeOAuthTokenRefs(query.data.code, state.record.codeVerifier),
-    });
+    await tokenRepository.saveXToken(exchange.token);
 
     const sessionToken = randomBytes(32).toString("base64url");
-    await sessionRepository.save(sessionToken, fixtureAccount.userId);
+    await sessionRepository.save(sessionToken, exchange.connectedAccount.userId);
 
     response.json({
-      connectedAccount: fixtureAccount,
+      connectedAccount: exchange.connectedAccount,
       sessionToken,
       tokenStorage: "repository-ref-only",
       writesEnabled: false,
@@ -374,17 +387,4 @@ function matchesToken(expected: string | undefined, actual: string | undefined):
   const expectedDigest = createHash("sha256").update(expected).digest();
   const actualDigest = createHash("sha256").update(actual).digest();
   return timingSafeEqual(expectedDigest, actualDigest);
-}
-
-function buildPrototypeOAuthTokenRefs(code: string, codeVerifier: string) {
-  const tokenRefSeed = createHash("sha256").update(`${code}:${codeVerifier}`).digest("hex").slice(0, 24);
-
-  return {
-    accessTokenRef: `vault://x/oauth/access/prototype-${tokenRefSeed}`,
-    refreshTokenRef: `vault://x/oauth/refresh/prototype-${tokenRefSeed}`,
-  };
-}
-
-function requiresRealOAuthTokenExchange(config: RuntimeConfig): boolean {
-  return config.nodeEnv === "production" && config.xOAuth.mode === "configured";
 }
