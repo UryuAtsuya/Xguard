@@ -1,6 +1,8 @@
 export interface RuntimeConfig {
   nodeEnv: string;
   port: number;
+  pricingConfirmed: boolean;
+  complianceConfirmed: boolean;
   appBaseUrl?: string;
   corsAllowedOrigins?: string[];
   xOAuth: XOAuthRuntimeConfig;
@@ -29,6 +31,17 @@ export type XOAuthRuntimeConfig =
 
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const nodeEnv = env.NODE_ENV?.trim() || "development";
+  const pricingConfirmed = env.PRICING_CONFIRMED?.trim() === "true";
+  const complianceConfirmed = env.COMPLIANCE_CONFIRMED?.trim() === "true";
+
+  if (nodeEnv === "production" && !pricingConfirmed) {
+    throw new Error("invalid_runtime_env:PRICING_CONFIRMED");
+  }
+
+  if (nodeEnv === "production" && !complianceConfirmed) {
+    throw new Error("invalid_runtime_env:COMPLIANCE_CONFIRMED");
+  }
+
   const port = parsePort(env.PORT);
   const appBaseUrl = parseOptionalUrl("APP_BASE_URL", env.APP_BASE_URL);
   const corsAllowedOrigins = parseCorsAllowedOrigins(env.CORS_ORIGINS, appBaseUrl, nodeEnv);
@@ -64,6 +77,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     return {
       nodeEnv,
       port,
+      pricingConfirmed,
+      complianceConfirmed,
       appBaseUrl,
       corsAllowedOrigins,
       oauthStateTtlSeconds,
@@ -83,6 +98,8 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   return {
     nodeEnv,
     port,
+    pricingConfirmed,
+    complianceConfirmed,
     appBaseUrl,
     corsAllowedOrigins,
     oauthStateTtlSeconds,

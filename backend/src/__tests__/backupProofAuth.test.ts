@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../app.js";
+import { createApp, type ProofPageComplianceEvent } from "../app.js";
 
 describe("backup and proof auth boundary", () => {
   it("rejects unauthenticated backup and proof access", async () => {
@@ -181,6 +181,88 @@ describe("backup and proof auth boundary", () => {
         params: { runId },
       }),
     ).toMatchObject({ statusCode: 409, body: { error: "proof_payload_revoked" } });
+  });
+
+  it("records one inspectable compliance event for the first successful revocation", async () => {
+    const app = createApp();
+    const sessionToken = "test-session-proof-revocation";
+    const userId = "user_proof_revocation";
+    await app.locals.sessionRepository.save(sessionToken, userId);
+    const runId = await createBackupRun(app, sessionToken);
+
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "public" },
+      params: { runId },
+    });
+    const revokeResponse = await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+
+    const events = getProofPageComplianceEvents(app);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      eventType: "proof_page_revoked",
+      source: "PATCH /api/recovery/:runId/proof/visibility",
+      runId,
+      userId,
+      previousVisibility: "public",
+      newVisibility: "revoked",
+      occurredAt: (revokeResponse.body as { revokedAt: string }).revokedAt,
+    });
+    expect(Date.parse(events[0].occurredAt)).not.toBeNaN();
+    expect(Date.parse(events[0].recordedAt)).not.toBeNaN();
+  });
+
+  it("does not record compliance events for rejected visibility requests", async () => {
+    const app = createApp();
+    const ownerToken = "test-session-proof-owner";
+    const otherToken = "test-session-proof-other";
+    await app.locals.sessionRepository.save(ownerToken, "user_proof_owner");
+    await app.locals.sessionRepository.save(otherToken, "user_proof_other");
+    const runId = await createBackupRun(app, ownerToken);
+
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${ownerToken}`,
+      body: { visibility: "private" },
+      params: { runId },
+    });
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${ownerToken}`,
+      body: { visibility: "revoked" },
+      params: { runId: "missing-run" },
+    });
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${otherToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+
+    expect(getProofPageComplianceEvents(app)).toHaveLength(0);
+
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${ownerToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${ownerToken}`,
+      body: { visibility: "public" },
+      params: { runId },
+    });
+
+    expect(getProofPageComplianceEvents(app)).toHaveLength(1);
   });
 
   it("rejects unsupported proof visibility changes", async () => {
@@ -368,4 +450,8 @@ function getSessionToken(body: unknown): string {
 
 function getRunId(body: unknown): string {
   return (body as { backupRun: { id: string } }).backupRun.id;
+}
+
+function getProofPageComplianceEvents(app: ReturnType<typeof createApp>): ProofPageComplianceEvent[] {
+  return app.locals.proofPageComplianceEvents as ProofPageComplianceEvent[];
 }

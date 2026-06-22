@@ -10,10 +10,16 @@ import {
 import { MockXApiClient } from "../clients/xApiClient.js";
 import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "../fixtures/mockXData.js";
+import type { StoredXToken } from "../repositories/tokenRepository.js";
 import { MockBackupService } from "../services/mockBackupService.js";
+import type { XOAuthTokenExchangeService } from "../services/xOAuthTokenExchangeService.js";
 
 const httpIt = process.env.CODEX_SANDBOX ? it.skip : it;
 const diagnosticToken = "0123456789abcdef0123456789abcdef";
+const productionConfirmations = {
+  PRICING_CONFIRMED: "true",
+  COMPLIANCE_CONFIRMED: "true",
+};
 
 describe("XGuard API prototype", () => {
   const oauthStatusKeys = [
@@ -49,6 +55,8 @@ describe("XGuard API prototype", () => {
     const response = buildOAuthStartResponse({
       nodeEnv: "test",
       port: 4000,
+      pricingConfirmed: false,
+      complianceConfirmed: false,
       appBaseUrl: "http://localhost:4000",
       corsAllowedOrigins: undefined,
       xOAuth: {
@@ -171,9 +179,10 @@ describe("XGuard API prototype", () => {
     }
   });
 
-  it("does not issue prototype token refs for configured OAuth callbacks in production", async () => {
+  it("returns unavailable exchange without vault refs or session material for configured production OAuth callbacks", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
+      ...productionConfirmations,
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
@@ -196,6 +205,72 @@ describe("XGuard API prototype", () => {
     expect(JSON.stringify(callbackResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(callbackResponse.body)).not.toContain("sessionToken");
     expect(await app.locals.sessionRepository.lookup("authorization-code")).toBeUndefined();
+    expect(await app.locals.tokenRepository.findXToken(fixtureAccount.id)).toBeNull();
+  });
+
+  it("uses an injected OAuth token exchange service to store token refs and issue a session", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      ...productionConfirmations,
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    });
+    const exchangedToken: StoredXToken = {
+      xAccountId: fixtureAccount.id,
+      provider: "x",
+      scope: ["tweet.read", "users.read", "offline.access"],
+      accessTokenRef: "vault://x/oauth/access/real-exchange-ref",
+      refreshTokenRef: "vault://x/oauth/refresh/real-exchange-ref",
+      expiresAt: "2026-06-22T12:00:00.000Z",
+    };
+    const exchangeInputs: unknown[] = [];
+    const exchangeService: XOAuthTokenExchangeService = {
+      async exchange(input) {
+        exchangeInputs.push(input);
+        return {
+          ok: true,
+          connectedAccount: fixtureAccount,
+          token: exchangedToken,
+        };
+      },
+    };
+    const app = createApp(config, { xOAuthTokenExchangeService: exchangeService });
+    const startRoute = findRegisteredGetRoute(app, "/api/x/oauth/start");
+    const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
+    const startResponse = createRouteResponseRecorder();
+
+    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
+    const callbackResponse = createRouteResponseRecorder();
+    await callbackRoute.stack[0].handle(
+      createRouteRequest(undefined, { code: "authorization-code", state: startBody.state }),
+      callbackResponse,
+    );
+    const body = callbackResponse.body as { sessionToken: string };
+
+    expect(callbackResponse.statusCode).toBeUndefined();
+    expect(callbackResponse.body).toMatchObject({
+      connectedAccount: fixtureAccount,
+      tokenStorage: "repository-ref-only",
+      writesEnabled: false,
+    });
+    expect(body.sessionToken).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(await app.locals.sessionRepository.lookup(body.sessionToken)).toBe(fixtureAccount.userId);
+    expect(await app.locals.tokenRepository.findXToken(fixtureAccount.id)).toEqual({
+      ...exchangedToken,
+      status: "active",
+    });
+    expect(exchangeInputs).toEqual([
+      {
+        code: "authorization-code",
+        codeVerifier: expect.stringMatching(/^[A-Za-z0-9_-]{86}$/),
+        callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
+        scopes: ["tweet.read", "users.read", "offline.access"],
+      },
+    ]);
+    expect(JSON.stringify(callbackResponse.body)).not.toContain("vault://");
+    expect(JSON.stringify(callbackResponse.body)).not.toContain("real-exchange-ref");
   });
 
   it("reports configured OAuth status without exposing secret material", async () => {
@@ -234,6 +309,8 @@ describe("XGuard API prototype", () => {
     const config = {
       nodeEnv: "test",
       port: 4000,
+      pricingConfirmed: false,
+      complianceConfirmed: false,
       appBaseUrl: "https://xguard.example.com",
       corsAllowedOrigins: undefined,
       xOAuth: {
@@ -321,6 +398,7 @@ describe("XGuard API prototype", () => {
   it("enables OAuth status in production only when deployment diagnostic exposure is explicit", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
+      ...productionConfirmations,
       PORT: "4000",
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
@@ -355,6 +433,7 @@ describe("XGuard API prototype", () => {
   it("does not expose deployment diagnostic OAuth status without the matching header token", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
+      ...productionConfirmations,
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
@@ -383,6 +462,7 @@ describe("XGuard API prototype", () => {
   httpIt("rejects missing and mismatched diagnostic tokens at the HTTP boundary", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
+      ...productionConfirmations,
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
@@ -407,6 +487,7 @@ describe("XGuard API prototype", () => {
   httpIt("serves deployment diagnostic status at the HTTP boundary only for the matching token", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
+      ...productionConfirmations,
       APP_BASE_URL: "https://xguard.example.com",
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
@@ -434,6 +515,8 @@ describe("XGuard API prototype", () => {
     const config = {
       nodeEnv: "test",
       port: 4000,
+      pricingConfirmed: false,
+      complianceConfirmed: false,
       appBaseUrl: "https://xguard.example.com",
       corsAllowedOrigins: undefined,
       xOAuth: {
@@ -468,6 +551,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
         X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: " ",
       }),
@@ -475,6 +559,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_OAUTH_STATUS_EXPOSURE: "deployment_diagnostic",
         X_OAUTH_STATUS_DIAGNOSTIC_TOKEN: "too-short",
       }),
@@ -493,12 +578,14 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         APP_BASE_URL: "https://xguard.example.com",
       }),
     ).toThrow("invalid_runtime_env:X_CLIENT_ID");
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         APP_BASE_URL: "https://xguard.example.com",
         X_CLIENT_ID: "real-client-id",
       }),
@@ -509,6 +596,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
       }),
@@ -516,6 +604,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         APP_BASE_URL: "http://localhost:4000",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -524,6 +613,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CALLBACK_URL: "http://127.0.0.1:4000/api/x/oauth/callback",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -532,6 +622,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CALLBACK_URL: "https://127.0.0.2/api/x/oauth/callback",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -540,6 +631,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CALLBACK_URL: "https://[::1]/api/x/oauth/callback",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -548,6 +640,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CALLBACK_URL: "http://xguard.example.com/api/x/oauth/callback",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -556,6 +649,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CALLBACK_URL: "https://localhost./api/x/oauth/callback",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -564,6 +658,7 @@ describe("XGuard API prototype", () => {
     expect(() =>
       createRuntimeConfig({
         NODE_ENV: "production",
+        ...productionConfirmations,
         X_CALLBACK_URL: "https://[::ffff:127.0.0.1]/api/x/oauth/callback",
         X_CLIENT_ID: "real-client-id",
         X_CLIENT_SECRET: "super-secret-value",
@@ -587,6 +682,7 @@ describe("XGuard API prototype", () => {
   it("limits CORS to configured origins in production", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
+      ...productionConfirmations,
       APP_BASE_URL: "https://app.xguard.example.com/app",
       X_CLIENT_ID: "real-client-id",
       X_CLIENT_SECRET: "super-secret-value",
