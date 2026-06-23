@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { createApp, type ProofPageComplianceEvent } from "../app.js";
+import type { ContentComplianceEvent } from "../../../shared/types.js";
+import { createApp } from "../app.js";
+import type { ContentComplianceEventRepository } from "../repositories/contentComplianceEventRepository.js";
 
 describe("backup and proof auth boundary", () => {
   it("rejects unauthenticated backup and proof access", async () => {
@@ -206,19 +208,22 @@ describe("backup and proof auth boundary", () => {
       params: { runId },
     });
 
-    const events = getProofPageComplianceEvents(app);
+    const events = await getProofPageComplianceEvents(app);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       eventType: "proof_page_revoked",
-      source: "PATCH /api/recovery/:runId/proof/visibility",
-      runId,
-      userId,
-      previousVisibility: "public",
-      newVisibility: "revoked",
-      occurredAt: (revokeResponse.body as { revokedAt: string }).revokedAt,
+      source: "user_request",
+      xAccountId: "xacct_fixture_001",
+      details: {
+        runId,
+        userId,
+        previousVisibility: "public",
+        newVisibility: "revoked",
+        occurredAt: (revokeResponse.body as { revokedAt: string }).revokedAt,
+      },
     });
-    expect(Date.parse(events[0].occurredAt)).not.toBeNaN();
-    expect(Date.parse(events[0].recordedAt)).not.toBeNaN();
+    expect(Date.parse(events[0].details.occurredAt as string)).not.toBeNaN();
+    expect(Date.parse(events[0].createdAt)).not.toBeNaN();
   });
 
   it("does not record compliance events for rejected visibility requests", async () => {
@@ -249,7 +254,7 @@ describe("backup and proof auth boundary", () => {
       params: { runId },
     });
 
-    expect(getProofPageComplianceEvents(app)).toHaveLength(0);
+    await expect(getProofPageComplianceEvents(app)).resolves.toHaveLength(0);
 
     await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
       authorization: `Bearer ${ownerToken}`,
@@ -262,7 +267,7 @@ describe("backup and proof auth boundary", () => {
       params: { runId },
     });
 
-    expect(getProofPageComplianceEvents(app)).toHaveLength(1);
+    await expect(getProofPageComplianceEvents(app)).resolves.toHaveLength(1);
   });
 
   it("rejects unsupported proof visibility changes", async () => {
@@ -452,6 +457,7 @@ function getRunId(body: unknown): string {
   return (body as { backupRun: { id: string } }).backupRun.id;
 }
 
-function getProofPageComplianceEvents(app: ReturnType<typeof createApp>): ProofPageComplianceEvent[] {
-  return app.locals.proofPageComplianceEvents as ProofPageComplianceEvent[];
+async function getProofPageComplianceEvents(app: ReturnType<typeof createApp>): Promise<ContentComplianceEvent[]> {
+  const repository = app.locals.contentComplianceEventRepository as ContentComplianceEventRepository;
+  return repository.listByXAccount("xacct_fixture_001");
 }
