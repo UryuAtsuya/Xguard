@@ -1,13 +1,19 @@
 import {
   Activity,
   BadgeCheck,
+  Bell,
+  ChevronRight,
+  Clock3,
+  DatabaseBackup,
   EyeOff,
   FileCheck2,
   KeyRound,
+  LayoutDashboard,
   LockKeyhole,
   RefreshCw,
+  Search,
+  Settings2,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -15,9 +21,11 @@ import type { BackupRun, ProofPublicPayload } from "../../shared/types";
 import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse, type OAuthStartResponse } from "./api";
 
 type Step = "snapshot" | "connect" | "backup" | "proof";
+type View = "home" | "admin" | "proof";
 
 export function App() {
   const [activeStep, setActiveStep] = useState<Step>("snapshot");
+  const [activeView, setActiveView] = useState<View>("home");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [oauth, setOauth] = useState<OAuthStartResponse | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -57,6 +65,7 @@ export function App() {
       const response = await startOAuth();
       setOauth(response);
       setActiveStep("connect");
+      setActiveView("admin");
       if (response.mode === "mock") {
         const callback = await completeOAuthCallback("mock-authorization-code", response.state);
         setSessionToken(callback.sessionToken);
@@ -86,6 +95,7 @@ export function App() {
       setBackupRun(response.backupRun);
       setProof(response.proofPayload);
       setActiveStep("proof");
+      setActiveView("proof");
       setNotice("証明ページDTOを作成済み");
     } catch {
       setNotice("バックアップに失敗");
@@ -96,100 +106,172 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero-band" aria-labelledby="hero-title">
-        <div className="hero-copy">
-          <p className="eyebrow">XGuard / read-only backup</p>
-          <h1 id="hero-title">消える前に、証明を残す。</h1>
-          <p className="hero-text">
-            Xのプロフィールと直近投稿を静かに保全し、必要なときだけ赤入れ済みの証明ページとして見せられるようにします。
-          </p>
-          <div className="hero-actions">
-            <button className="primary-action" type="button" onClick={handleConnect} disabled={isBusy}>
-              <KeyRound aria-hidden="true" size={18} />
-              Xを安全に接続
-            </button>
-            <button className="secondary-action" type="button" onClick={handleBackup} disabled={isBusy}>
-              <RefreshCw aria-hidden="true" size={18} />
-              今すぐバックアップ
-            </button>
-          </div>
+      <header className="top-bar">
+        <div className="brand-mark">
+          <ShieldCheck aria-hidden="true" size={22} />
+          <span>XGuard</span>
         </div>
-
-        <div className="status-panel" aria-live="polite">
-          <div className="status-header">
-            <span>Account Risk Snapshot</span>
-            <span className="status-chip">{health?.xOAuthMode ?? "checking"}</span>
-          </div>
-          <div className="readiness-value">{readiness}%</div>
-          <div className="progress-track" aria-label={`バックアップ準備 ${readiness}%`}>
-            <span style={{ width: `${readiness}%` }} />
-          </div>
-          <p>{notice}</p>
+        <nav className="view-tabs" aria-label="Primary">
+          <ViewButton view="home" activeView={activeView} onSelect={setActiveView} icon={<LayoutDashboard size={16} />}>
+            Home
+          </ViewButton>
+          <ViewButton view="admin" activeView={activeView} onSelect={setActiveView} icon={<Settings2 size={16} />}>
+            Admin
+          </ViewButton>
+          <ViewButton view="proof" activeView={activeView} onSelect={setActiveView} icon={<FileCheck2 size={16} />}>
+            Proof
+          </ViewButton>
+        </nav>
+        <div className="top-actions">
+          <button className="icon-button" type="button" aria-label="検索">
+            <Search aria-hidden="true" size={18} />
+          </button>
+          <button className="icon-button" type="button" aria-label="通知">
+            <Bell aria-hidden="true" size={18} />
+          </button>
         </div>
-      </section>
+      </header>
 
-      <section className="workflow-grid" aria-label="XGuard workflow">
-        <ScreenCard
-          title="接続"
-          step="connect"
-          activeStep={activeStep}
-          icon={<ShieldCheck aria-hidden="true" size={20} />}
-          onSelect={setActiveStep}
-        >
-          <p className="screen-lead">投稿もDMも、勝手に触らない。</p>
-          <InfoRow label="許可する範囲" value={oauth ? `${oauth.scopes.length} scopes` : "3 scopes"} />
-          <ScopeList scopes={oauth?.scopes ?? ["tweet.read", "users.read", "offline.access"]} />
-          <SafetyList />
-        </ScreenCard>
-
-        <ScreenCard
-          title="Backup"
-          step="backup"
-          activeStep={activeStep}
-          icon={<Activity aria-hidden="true" size={20} />}
-          onSelect={setActiveStep}
-        >
-          <div className="metric-line">
-            <span>{backupRun?.tweetsCaptured ?? 148}</span>
-            <strong>saved posts</strong>
+      <section className="workspace-grid" aria-label="XGuard wireframe workspace">
+        <section className="home-panel" aria-labelledby="hero-title" data-active={activeView === "home"}>
+          <div className="hero-copy">
+            <p className="eyebrow">Read-only X backup and proof control</p>
+            <h1 id="hero-title">
+              Xの信用資産を、<span className="no-break">静かに守る。</span>
+            </h1>
+            <p className="hero-text">
+              プロフィールと直近投稿を保全し、必要なときだけ赤入れ済みの証明ページとして共有できます。
+            </p>
+            <div className="hero-actions">
+              <button className="primary-action" type="button" onClick={handleConnect} disabled={isBusy}>
+                <KeyRound aria-hidden="true" size={18} />
+                Xを安全に接続
+              </button>
+              <button className="secondary-action" type="button" onClick={() => setActiveView("admin")}>
+                管理画面を見る
+                <ChevronRight aria-hidden="true" size={18} />
+              </button>
+            </div>
           </div>
-          <InfoRow label="Profile" value={backupRun ? "保存済み" : "待機中"} />
-          <InfoRow label="API cost guard" value={formatCost(backupRun?.estimatedCostUsd ?? 0.02)} />
-          <InfoRow label="Rate limit" value={`${backupRun?.rateLimitRemaining ?? 1499} left`} />
-          <button className="primary-action full-width" type="button" onClick={handleBackup} disabled={isBusy}>
-            <RefreshCw aria-hidden="true" size={18} />
-            バックアップを実行
-          </button>
-        </ScreenCard>
 
-        <ScreenCard
-          title="Proof"
-          step="proof"
-          activeStep={activeStep}
-          icon={<FileCheck2 aria-hidden="true" size={20} />}
-          onSelect={setActiveStep}
-        >
-          <p className="screen-lead">見せる情報を、自分で選ぶ。</p>
-          <VisibilitySelector />
-          {proof ? <ProofPreview proof={proof} /> : <EmptyProof />}
-          <button className="secondary-action full-width" type="button" disabled={!proof}>
-            <EyeOff aria-hidden="true" size={18} />
-            証明ページを失効
-          </button>
-        </ScreenCard>
-
-        <aside className="companion-panel" aria-label="Desktop companion">
-          <div className="companion-heading">
-            <Sparkles aria-hidden="true" size={20} />
-            <h2>運用レビュー</h2>
+          <div className="readiness-card" aria-live="polite">
+            <div className="panel-header">
+              <span>Risk Snapshot</span>
+              <span className="status-chip">{health?.xOAuthMode ?? "checking"}</span>
+            </div>
+            <div className="readiness-value">{readiness}%</div>
+            <div className="progress-track" aria-label={`バックアップ準備 ${readiness}%`}>
+              <span style={{ width: `${readiness}%` }} />
+            </div>
+            <p>{notice}</p>
           </div>
-          <InfoRow label="API" value={health?.ok ? "online" : "checking"} />
-          <InfoRow label="OAuth" value={oauth?.mode ?? "mock ready"} />
-          <InfoRow label="Proof privacy" value="Private default" />
-          <InfoRow label="Automation" value="No post / DM / follow" />
-        </aside>
+        </section>
+
+        <section className="admin-panel" aria-label="管理画面" data-active={activeView === "admin"}>
+          <div className="section-heading">
+            <p className="eyebrow">Admin Console</p>
+            <h2>保全オペレーション</h2>
+          </div>
+
+          <div className="admin-grid">
+            <ScreenCard
+              title="接続"
+              step="connect"
+              activeStep={activeStep}
+              icon={<ShieldCheck aria-hidden="true" size={20} />}
+              onSelect={setActiveStep}
+            >
+              <p className="screen-lead">投稿もDMも、勝手に触らない。</p>
+              <InfoRow label="許可する範囲" value={oauth ? `${oauth.scopes.length} scopes` : "3 scopes"} />
+              <ScopeList scopes={oauth?.scopes ?? ["tweet.read", "users.read", "offline.access"]} />
+              <SafetyList />
+            </ScreenCard>
+
+            <ScreenCard
+              title="Backup"
+              step="backup"
+              activeStep={activeStep}
+              icon={<DatabaseBackup aria-hidden="true" size={20} />}
+              onSelect={setActiveStep}
+            >
+              <div className="metric-line">
+                <span>{backupRun?.tweetsCaptured ?? 148}</span>
+                <strong>saved posts</strong>
+              </div>
+              <InfoRow label="Profile" value={backupRun ? "保存済み" : "待機中"} />
+              <InfoRow label="API cost guard" value={formatCost(backupRun?.estimatedCostUsd ?? 0.02)} />
+              <InfoRow label="Rate limit" value={`${backupRun?.rateLimitRemaining ?? 1499} left`} />
+              <button className="primary-action full-width" type="button" onClick={handleBackup} disabled={isBusy}>
+                <RefreshCw aria-hidden="true" size={18} />
+                バックアップを実行
+              </button>
+            </ScreenCard>
+
+            <aside className="ops-panel" aria-label="運用レビュー">
+              <div className="panel-header">
+                <span>Operations</span>
+                <Activity aria-hidden="true" size={18} />
+              </div>
+              <InfoRow label="API" value={health?.ok ? "online" : "checking"} />
+              <InfoRow label="OAuth" value={oauth?.mode ?? "mock ready"} />
+              <InfoRow label="Proof privacy" value="Private default" />
+              <InfoRow label="Automation" value="No post / DM / follow" />
+            </aside>
+          </div>
+        </section>
+
+        <section className="proof-panel" aria-label="証明レビュー" data-active={activeView === "proof"}>
+          <div className="section-heading">
+            <p className="eyebrow">Proof Review</p>
+            <h2>公開前チェック</h2>
+          </div>
+          <div className="proof-layout">
+            <ScreenCard
+              title="Proof"
+              step="proof"
+              activeStep={activeStep}
+              icon={<FileCheck2 aria-hidden="true" size={20} />}
+              onSelect={setActiveStep}
+            >
+              <p className="screen-lead">見せる情報を、自分で選ぶ。</p>
+              <VisibilitySelector />
+              {proof ? <ProofPreview proof={proof} /> : <EmptyProof />}
+              <button className="secondary-action full-width" type="button" disabled={!proof}>
+                <EyeOff aria-hidden="true" size={18} />
+                証明ページを失効
+              </button>
+            </ScreenCard>
+
+            <aside className="timeline-panel" aria-label="タイムライン">
+              <div className="panel-header">
+                <span>Review queue</span>
+                <Clock3 aria-hidden="true" size={18} />
+              </div>
+              <ReviewItem title="DTO redaction" value="required" />
+              <ReviewItem title="Representative posts" value={proof ? `${proof.representativeTweets.length} selected` : "waiting"} />
+              <ReviewItem title="Public state" value="private by default" />
+            </aside>
+          </div>
+        </section>
       </section>
     </main>
+  );
+}
+
+interface ViewButtonProps {
+  view: View;
+  activeView: View;
+  icon: ReactNode;
+  children: ReactNode;
+  onSelect: (view: View) => void;
+}
+
+function ViewButton({ view, activeView, icon, children, onSelect }: ViewButtonProps) {
+  return (
+    <button className="view-button" type="button" aria-pressed={activeView === view} onClick={() => onSelect(view)}>
+      {icon}
+      <span>{children}</span>
+    </button>
   );
 }
 
@@ -270,6 +352,15 @@ function EmptyProof() {
   return (
     <div className="proof-preview empty">
       <p>バックアップを実行すると、赤入れ済みの公開用DTOがここに出ます。</p>
+    </div>
+  );
+}
+
+function ReviewItem({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="review-item">
+      <span>{title}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

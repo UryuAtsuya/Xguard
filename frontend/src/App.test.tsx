@@ -94,8 +94,9 @@ describe("App", () => {
     async () => {
       render(<App />);
 
-      expect(screen.getByRole("heading", { name: "消える前に、証明を残す。" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Xの信用資産を、静かに守る。" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument();
 
       await waitFor(() => {
         expect(screen.getByText("mock APIに接続済み")).toBeInTheDocument();
