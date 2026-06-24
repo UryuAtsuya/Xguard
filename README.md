@@ -29,6 +29,7 @@ v0の目的は、BANされたアカウントを自動復活させることでは
 - `docs/ARCHITECTURE.md`: backend-first architectureと安全境界。
 - `docs/API_COST_MODEL.md`: API usage eventとcost tracking contract。
 - `docs/COMPLIANCE.md`: proof page、削除、manual reviewのcompliance contract。
+- `docs/LOCAL_STATUS_CHECK.md`: ローカル起動、API smoke、Web確認、CI相当確認の手順。
 
 ## プロトタイプコード
 

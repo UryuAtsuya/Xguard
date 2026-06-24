@@ -9,6 +9,7 @@ import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXD
 import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
+import { InMemoryContentComplianceEventRepository } from "./repositories/contentComplianceEventRepository.js";
 import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
 import { MockBackupService } from "./services/mockBackupService.js";
 import {
@@ -99,17 +100,6 @@ export interface BackupRunEntry {
   proofPayload: BackupRunResult["proofPayload"];
 }
 
-export interface ProofPageComplianceEvent {
-  eventType: "proof_page_revoked";
-  source: "PATCH /api/recovery/:runId/proof/visibility";
-  runId: string;
-  userId: string;
-  previousVisibility: ProofPageVisibility;
-  newVisibility: "revoked";
-  occurredAt: string;
-  recordedAt: string;
-}
-
 export interface CreateAppOptions {
   xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
 }
@@ -135,17 +125,17 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   const sessionRepository = new InMemorySessionRepository();
   const xOAuthTokenExchangeService =
     options.xOAuthTokenExchangeService ?? createDefaultXOAuthTokenExchangeService(config);
+  const contentComplianceEventRepository = new InMemoryContentComplianceEventRepository();
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, BackupRunEntry>();
-  const proofPageComplianceEvents: ProofPageComplianceEvent[] = [];
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
   app.locals.sessionRepository = sessionRepository;
   app.locals.tokenRepository = tokenRepository;
   app.locals.backupRuns = backupRuns;
-  app.locals.proofPageComplianceEvents = proofPageComplianceEvents;
+  app.locals.contentComplianceEventRepository = contentComplianceEventRepository;
 
   app.get("/health", (_request, response) => {
     response.json({
@@ -259,7 +249,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     response.json(entry.backupRun);
   });
 
-  app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), (request, response) => {
+  app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), async (request, response) => {
     const body = z.object({ visibility: z.enum(["unlisted", "public", "revoked"]) }).safeParse(request.body ?? {});
 
     if (!body.success) {
@@ -292,20 +282,23 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
       visibility: body.data.visibility,
       revokedAt,
     };
-    backupRuns.set(runId, updatedEntry);
-
     if (body.data.visibility === "revoked" && entry.visibility !== "revoked") {
-      proofPageComplianceEvents.push({
+      await contentComplianceEventRepository.record({
         eventType: "proof_page_revoked",
-        source: "PATCH /api/recovery/:runId/proof/visibility",
-        runId,
-        userId: entry.userId,
-        previousVisibility: entry.visibility,
-        newVisibility: "revoked",
-        occurredAt: revokedAt!,
-        recordedAt: new Date().toISOString(),
+        source: "user_request",
+        xAccountId: entry.backupRun.xAccountId,
+        details: {
+          runId,
+          userId: entry.userId,
+          previousVisibility: entry.visibility,
+          newVisibility: "revoked",
+          occurredAt: revokedAt!,
+        },
+        createdAt: new Date().toISOString(),
       });
     }
+
+    backupRuns.set(runId, updatedEntry);
 
     response.json({
       runId,
