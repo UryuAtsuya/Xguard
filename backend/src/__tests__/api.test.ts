@@ -19,6 +19,7 @@ const diagnosticToken = "0123456789abcdef0123456789abcdef";
 const productionConfirmations = {
   PRICING_CONFIRMED: "true",
   COMPLIANCE_CONFIRMED: "true",
+  CONTENT_COMPLIANCE_EVENT_REPOSITORY: "memory",
 };
 
 describe("XGuard API prototype", () => {
@@ -69,6 +70,7 @@ describe("XGuard API prototype", () => {
       oauthPkceVerifierBytes: 64,
       oauthStatusExposure: "deployment_diagnostic",
       oauthStatusDiagnosticToken: "0123456789abcdef0123456789abcdef",
+      contentComplianceEventRepository: "memory",
     });
     const authorizationUrl = new URL(response.authorizationUrl);
 
@@ -323,6 +325,7 @@ describe("XGuard API prototype", () => {
       oauthPkceVerifierBytes: 64,
       oauthStatusExposure: "deployment_diagnostic" as const,
       oauthStatusDiagnosticToken: "0123456789abcdef0123456789abcdef",
+      contentComplianceEventRepository: "memory" as const,
     };
 
     const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
@@ -530,6 +533,7 @@ describe("XGuard API prototype", () => {
       oauthPkceVerifierBytes: 64,
       oauthStatusExposure: "deployment_diagnostic" as const,
       oauthStatusDiagnosticToken: undefined,
+      contentComplianceEventRepository: "memory" as const,
     };
     const statusRoute = findRegisteredGetRoute(createApp(config), "/api/x/oauth/status");
     const statusResponse = createRouteResponseRecorder();
