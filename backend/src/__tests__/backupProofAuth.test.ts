@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { ContentComplianceEvent } from "../../../shared/types.js";
 import { createApp } from "../app.js";
+import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import type { ContentComplianceEventRepository } from "../repositories/contentComplianceEventRepository.js";
+import type {
+  SupabaseContentComplianceEventRow,
+  SupabaseContentComplianceEventStore,
+} from "../repositories/supabaseContentComplianceEventRepository.js";
 
 describe("backup and proof auth boundary", () => {
   it("rejects unauthenticated backup and proof access", async () => {
@@ -213,7 +218,7 @@ describe("backup and proof auth boundary", () => {
     expect(events[0]).toMatchObject({
       eventType: "proof_page_revoked",
       source: "user_request",
-      xAccountId: "xacct_fixture_001",
+      xAccountId: "11111111-1111-4111-8111-111111111111",
       details: {
         runId,
         userId,
@@ -224,6 +229,48 @@ describe("backup and proof auth boundary", () => {
     });
     expect(Date.parse(events[0].details.occurredAt as string)).not.toBeNaN();
     expect(Date.parse(events[0].createdAt)).not.toBeNaN();
+  });
+
+  it("routes proof revocation compliance events through the configured Supabase repository", async () => {
+    const store = new RecordingSupabaseContentComplianceEventStore();
+    const app = createApp(
+      createRuntimeConfig({
+        CONTENT_COMPLIANCE_EVENT_REPOSITORY: "supabase",
+      }),
+      { contentComplianceEventStore: store },
+    );
+    const sessionToken = "test-session-proof-supabase-revocation";
+    await app.locals.sessionRepository.save(sessionToken, "user_proof_supabase_revocation");
+    const runId = await createBackupRun(app, sessionToken);
+
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]).toMatchObject({
+      x_account_id: "11111111-1111-4111-8111-111111111111",
+      event_type: "proof_page_revoked",
+      source: "user_request",
+      details: {
+        runId,
+        userId: "user_proof_supabase_revocation",
+        previousVisibility: "private",
+        newVisibility: "revoked",
+      },
+    });
+  });
+
+  it("fails startup when Supabase compliance event storage is selected without a store", () => {
+    expect(() =>
+      createApp(
+        createRuntimeConfig({
+          CONTENT_COMPLIANCE_EVENT_REPOSITORY: "supabase",
+        }),
+      ),
+    ).toThrow("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY_STORE");
   });
 
   it("does not record compliance events for rejected visibility requests", async () => {
@@ -459,5 +506,30 @@ function getRunId(body: unknown): string {
 
 async function getProofPageComplianceEvents(app: ReturnType<typeof createApp>): Promise<ContentComplianceEvent[]> {
   const repository = app.locals.contentComplianceEventRepository as ContentComplianceEventRepository;
-  return repository.listByXAccount("xacct_fixture_001");
+  return repository.listByXAccount("11111111-1111-4111-8111-111111111111");
+}
+
+class RecordingSupabaseContentComplianceEventStore implements SupabaseContentComplianceEventStore {
+  readonly rows: SupabaseContentComplianceEventRow[] = [];
+
+  async insertContentComplianceEvent(
+    row: Omit<SupabaseContentComplianceEventRow, "id" | "created_at"> & {
+      id?: string;
+      created_at?: string;
+    },
+  ): Promise<SupabaseContentComplianceEventRow> {
+    const storedRow: SupabaseContentComplianceEventRow = {
+      ...row,
+      id: row.id ?? randomUUID(),
+      created_at: row.created_at ?? new Date().toISOString(),
+    };
+    this.rows.push(storedRow);
+    return { ...storedRow, details: { ...storedRow.details } };
+  }
+
+  async listContentComplianceEventsByXAccount(xAccountId: string): Promise<SupabaseContentComplianceEventRow[]> {
+    return this.rows
+      .filter((row) => row.x_account_id === xAccountId)
+      .map((row) => ({ ...row, details: { ...row.details } }));
+  }
 }

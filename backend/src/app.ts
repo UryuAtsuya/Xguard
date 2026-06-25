@@ -9,7 +9,14 @@ import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXD
 import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
-import { InMemoryContentComplianceEventRepository } from "./repositories/contentComplianceEventRepository.js";
+import {
+  InMemoryContentComplianceEventRepository,
+  type ContentComplianceEventRepository,
+} from "./repositories/contentComplianceEventRepository.js";
+import {
+  SupabaseContentComplianceEventRepository,
+  type SupabaseContentComplianceEventStore,
+} from "./repositories/supabaseContentComplianceEventRepository.js";
 import { createInMemoryApiUsageLedgerService } from "./services/apiUsageLedger.js";
 import { MockBackupService } from "./services/mockBackupService.js";
 import {
@@ -102,6 +109,7 @@ export interface BackupRunEntry {
 
 export interface CreateAppOptions {
   xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
+  contentComplianceEventStore?: SupabaseContentComplianceEventStore;
 }
 
 export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
@@ -125,7 +133,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   const sessionRepository = new InMemorySessionRepository();
   const xOAuthTokenExchangeService =
     options.xOAuthTokenExchangeService ?? createDefaultXOAuthTokenExchangeService(config);
-  const contentComplianceEventRepository = new InMemoryContentComplianceEventRepository();
+  const contentComplianceEventRepository = createContentComplianceEventRepository(config, options);
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const backupRuns = new Map<string, BackupRunEntry>();
@@ -329,6 +337,21 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   });
 
   return app;
+}
+
+function createContentComplianceEventRepository(
+  config: RuntimeConfig,
+  options: CreateAppOptions,
+): ContentComplianceEventRepository {
+  if (config.contentComplianceEventRepository === "memory") {
+    return new InMemoryContentComplianceEventRepository();
+  }
+
+  if (!options.contentComplianceEventStore) {
+    throw new Error("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY_STORE");
+  }
+
+  return new SupabaseContentComplianceEventRepository(options.contentComplianceEventStore);
 }
 
 interface AuthenticatedRequest extends Request {

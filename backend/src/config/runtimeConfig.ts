@@ -10,9 +10,11 @@ export interface RuntimeConfig {
   oauthPkceVerifierBytes: number;
   oauthStatusExposure: OAuthStatusExposure;
   oauthStatusDiagnosticToken?: string;
+  contentComplianceEventRepository: ContentComplianceEventRepositoryMode;
 }
 
 export type OAuthStatusExposure = "disabled" | "deployment_diagnostic";
+export type ContentComplianceEventRepositoryMode = "memory" | "supabase";
 
 export type XOAuthRuntimeConfig =
   | {
@@ -53,6 +55,13 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const oauthPkceVerifierBytes = parseBoundedInteger(env.OAUTH_PKCE_VERIFIER_BYTES, 64, 32, 96, "OAUTH_PKCE_VERIFIER_BYTES");
   const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE);
   const oauthStatusDiagnosticToken = env.X_OAUTH_STATUS_DIAGNOSTIC_TOKEN?.trim() || undefined;
+  const contentComplianceEventRepository = parseContentComplianceEventRepository(
+    env.CONTENT_COMPLIANCE_EVENT_REPOSITORY,
+  );
+
+  if (nodeEnv === "production" && !env.CONTENT_COMPLIANCE_EVENT_REPOSITORY?.trim()) {
+    throw new Error("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY");
+  }
 
   if (
     oauthStatusExposure === "deployment_diagnostic" &&
@@ -85,6 +94,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       oauthPkceVerifierBytes,
       oauthStatusExposure,
       oauthStatusDiagnosticToken,
+      contentComplianceEventRepository,
       xOAuth: {
         mode: "mock",
         clientId: "mock",
@@ -106,6 +116,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     oauthPkceVerifierBytes,
     oauthStatusExposure,
     oauthStatusDiagnosticToken,
+    contentComplianceEventRepository,
     xOAuth: {
       mode: "configured",
       clientId,
@@ -113,6 +124,20 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       clientSecretConfigured: Boolean(clientSecret),
     },
   };
+}
+
+function parseContentComplianceEventRepository(value: string | undefined): ContentComplianceEventRepositoryMode {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "memory";
+  }
+
+  if (trimmed === "memory" || trimmed === "supabase") {
+    return trimmed;
+  }
+
+  throw new Error("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY");
 }
 
 function parsePositiveInteger(value: string | undefined, defaultValue: number, fieldName: string): number {
