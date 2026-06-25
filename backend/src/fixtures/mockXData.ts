@@ -3,7 +3,7 @@ import type { ProfileSnapshot, TweetSnapshot, XAccount } from "../../../shared/t
 const now = new Date("2026-05-24T04:30:00.000Z").toISOString();
 
 export const fixtureAccount: XAccount = {
-  id: "xacct_fixture_001",
+  id: "11111111-1111-4111-8111-111111111111",
   userId: "user_fixture_001",
   xUserId: "1234567890",
   username: "xguard_creator",

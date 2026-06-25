@@ -6,6 +6,7 @@ const productionEnv = {
   APP_BASE_URL: "https://xguard.example.com",
   X_CLIENT_ID: "real-client-id",
   X_CLIENT_SECRET: "super-secret-value",
+  CONTENT_COMPLIANCE_EVENT_REPOSITORY: "memory",
 };
 
 describe("runtime confirmation gates", () => {
@@ -46,6 +47,18 @@ describe("runtime confirmation gates", () => {
     }
   });
 
+  it("rejects production when content compliance event storage is not explicit", () => {
+    const { CONTENT_COMPLIANCE_EVENT_REPOSITORY: _repositoryMode, ...productionEnvWithoutRepository } = productionEnv;
+
+    expect(() =>
+      createRuntimeConfig({
+        ...productionEnvWithoutRepository,
+        PRICING_CONFIRMED: "true",
+        COMPLIANCE_CONFIRMED: "true",
+      }),
+    ).toThrow("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY");
+  });
+
   it("skips confirmation gates in staging", () => {
     const config = createRuntimeConfig({
       NODE_ENV: "staging",
@@ -62,5 +75,22 @@ describe("runtime confirmation gates", () => {
 
     expect(config.pricingConfirmed).toBe(false);
     expect(config.complianceConfirmed).toBe(false);
+  });
+
+  it("uses in-memory content compliance event storage unless Supabase is explicitly selected", () => {
+    expect(createRuntimeConfig({}).contentComplianceEventRepository).toBe("memory");
+    expect(
+      createRuntimeConfig({
+        CONTENT_COMPLIANCE_EVENT_REPOSITORY: " supabase ",
+      }).contentComplianceEventRepository,
+    ).toBe("supabase");
+  });
+
+  it("rejects unsupported content compliance event repository modes", () => {
+    expect(() =>
+      createRuntimeConfig({
+        CONTENT_COMPLIANCE_EVENT_REPOSITORY: "postgres",
+      }),
+    ).toThrow("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY");
   });
 });
