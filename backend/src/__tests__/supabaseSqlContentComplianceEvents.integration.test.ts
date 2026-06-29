@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.POSTGRES_URL;
+const databaseUrl = readDatabaseUrl();
 const integrationEnabled = process.env.RUN_SUPABASE_SQL_INTEGRATION_TESTS === "1" && databaseUrl !== undefined;
 const describeIfIntegration = integrationEnabled ? describe : describe.skip;
 
@@ -253,6 +253,10 @@ function runPsql(sql: string, options: { expectFailure?: boolean } = {}): { stdo
   }
 
   return { stdout, stderr };
+}
+
+function readDatabaseUrl(): string | undefined {
+  return process.env.SUPABASE_DB_URL?.trim() || process.env.POSTGRES_URL?.trim() || undefined;
 }
 
 function createFixtureIds(): Record<string, string> & { suffix: string; shortSuffix: string } {
