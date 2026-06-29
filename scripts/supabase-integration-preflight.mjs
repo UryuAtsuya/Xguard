@@ -27,12 +27,17 @@ const psqlSource = process.env.PSQL_BIN?.trim() ? "PSQL_BIN" : "PATH";
 const psqlBin = process.env.PSQL_BIN?.trim() || "psql";
 const psqlCheck = spawnSync(psqlBin, ["--version"], {
   encoding: "utf8",
-  stdio: ["ignore", "ignore", "ignore"],
+  stdio: ["ignore", "pipe", "pipe"],
 });
+const psqlVersionOutput = `${psqlCheck.stdout ?? ""}${psqlCheck.stderr ?? ""}`;
+const isPsqlExecutable =
+  psqlCheck.error === undefined &&
+  psqlCheck.status === 0 &&
+  /\b(psql|PostgreSQL)\b/i.test(psqlVersionOutput);
 
 record(
-  psqlCheck.error === undefined && psqlCheck.status === 0,
-  psqlCheck.error === undefined && psqlCheck.status === 0
+  isPsqlExecutable,
+  isPsqlExecutable
     ? `psql executable is available via ${psqlSource}`
     : `psql executable is not available via ${psqlSource}`,
 );
