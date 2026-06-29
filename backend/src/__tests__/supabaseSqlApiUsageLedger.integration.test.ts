@@ -367,7 +367,7 @@ function runPsql(sql: string, options: { expectFailure?: boolean } = {}): { stdo
   }
 
   const result = spawnSync(
-    process.env.PSQL_BIN ?? "psql",
+    readPsqlBin(),
     ["--no-psqlrc", "--quiet", "--no-align", "--tuples-only", "--set=ON_ERROR_STOP=1"],
     {
       env: {
@@ -399,6 +399,10 @@ function runPsql(sql: string, options: { expectFailure?: boolean } = {}): { stdo
 
 function readDatabaseUrl(): string | undefined {
   return process.env.SUPABASE_DB_URL?.trim() || process.env.POSTGRES_URL?.trim() || undefined;
+}
+
+function readPsqlBin(): string {
+  return process.env.PSQL_BIN?.trim() || "psql";
 }
 
 function createFixtureIds(): Record<string, string> & { suffix: string; shortSuffix: string } {
