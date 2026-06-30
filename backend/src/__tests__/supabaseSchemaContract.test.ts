@@ -7,6 +7,8 @@ const usageLedgerFunctionSql =
   schemaSql.match(
     /create or replace function public\.record_api_usage_event_with_monthly_limit\([\s\S]*?\n\$\$;/,
   )?.[0] ?? "";
+const xOauthConnectionsTableSql =
+  schemaSql.match(/create table public\.x_oauth_connections \([\s\S]*?\n\);/)?.[0] ?? "";
 const contentComplianceEventsTableSql =
   schemaSql.match(/create table public\.content_compliance_events \([\s\S]*?\n\);/)?.[0] ?? "";
 const ownComplianceEventsPolicySql =
@@ -27,6 +29,41 @@ describe("Supabase schema contract", () => {
     expect(usageLedgerFunctionSql).not.toContain(
       "p_x_account_id is null or backup_runs.x_account_id = p_x_account_id",
     );
+  });
+
+  it("defines OAuth token persistence with token references and service-role-only exposure", () => {
+    expect(schemaSql).toContain(
+      "create type public.x_oauth_connection_status as enum ('active', 'auth_expired', 'revoked');",
+    );
+
+    expect(xOauthConnectionsTableSql).toContain(
+      "x_account_id uuid not null references public.x_accounts(id) on delete cascade",
+    );
+    expect(xOauthConnectionsTableSql).toContain("provider text not null default 'x'");
+    expect(xOauthConnectionsTableSql).toContain("scope text[] not null default '{}'");
+    expect(xOauthConnectionsTableSql).toContain("access_token_ref text not null");
+    expect(xOauthConnectionsTableSql).toContain("refresh_token_ref text");
+    expect(xOauthConnectionsTableSql).toContain(
+      "status public.x_oauth_connection_status not null default 'active'",
+    );
+    expect(xOauthConnectionsTableSql).toContain("expires_at timestamptz");
+    expect(xOauthConnectionsTableSql).toContain("refreshed_at timestamptz");
+    expect(xOauthConnectionsTableSql).toContain("auth_expired_at timestamptz");
+    expect(xOauthConnectionsTableSql).toContain("revoked_at timestamptz");
+    expect(xOauthConnectionsTableSql).toContain("failure_reason text");
+    expect(xOauthConnectionsTableSql).toContain("updated_at timestamptz not null default now()");
+    expect(xOauthConnectionsTableSql).toContain("unique (x_account_id, provider)");
+
+    expect(xOauthConnectionsTableSql).not.toContain("encrypted_access_token");
+    expect(xOauthConnectionsTableSql).not.toContain("encrypted_refresh_token");
+    expect(xOauthConnectionsTableSql).not.toContain("token_cipher_version");
+
+    expect(schemaSql).toContain("alter table public.x_oauth_connections enable row level security;");
+    expect(schemaSql).toContain(
+      "revoke all on table public.x_oauth_connections from public, anon, authenticated;",
+    );
+    expect(schemaSql).toContain("grant all on table public.x_oauth_connections to service_role;");
+    expect(schemaSql).not.toMatch(/create policy [\s\S]* on public\.x_oauth_connections/);
   });
 
   it("defines content compliance events with ownership constraints and read policy", () => {

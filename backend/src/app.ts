@@ -2,13 +2,13 @@ import cors, { type CorsOptions } from "cors";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import type { ProofPageVisibility } from "../../shared/types.js";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
 import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
+import { InMemoryProofPageRepository } from "./repositories/proofPageRepository.js";
 import {
   InMemoryContentComplianceEventRepository,
   type ContentComplianceEventRepository,
@@ -97,16 +97,6 @@ export function buildOAuthStartResponse(
 
 export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
-type BackupRunResult = Awaited<ReturnType<MockBackupService["runBackup"]>>;
-
-export interface BackupRunEntry {
-  userId: string;
-  visibility: ProofPageVisibility;
-  revokedAt: string | null;
-  backupRun: BackupRunResult["backupRun"];
-  proofPayload: BackupRunResult["proofPayload"];
-}
-
 export interface CreateAppOptions {
   xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
   contentComplianceEventStore?: SupabaseContentComplianceEventStore;
@@ -136,13 +126,13 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   const contentComplianceEventRepository = createContentComplianceEventRepository(config, options);
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
-  const backupRuns = new Map<string, BackupRunEntry>();
+  const proofPageRepository = new InMemoryProofPageRepository();
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
   app.locals.sessionRepository = sessionRepository;
   app.locals.tokenRepository = tokenRepository;
-  app.locals.backupRuns = backupRuns;
+  app.locals.proofPageRepository = proofPageRepository;
   app.locals.contentComplianceEventRepository = contentComplianceEventRepository;
 
   app.get("/health", (_request, response) => {
@@ -232,7 +222,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     }
 
     const result = await backupService.runBackup(body.data.tweetLimit);
-    backupRuns.set(result.backupRun.id, {
+    await proofPageRepository.create({
       userId: getAuthenticatedUserId(request),
       visibility: "private",
       revokedAt: null,
@@ -241,8 +231,8 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     response.status(201).json(result);
   });
 
-  app.get("/api/backup/status/:runId", requireAuth(sessionRepository), (request, response) => {
-    const entry = backupRuns.get(getStringParam(request, "runId"));
+  app.get("/api/backup/status/:runId", requireAuth(sessionRepository), async (request, response) => {
+    const entry = await proofPageRepository.findByRunId(getStringParam(request, "runId"));
 
     if (!entry) {
       response.status(404).json({ error: "backup_run_not_found" });
@@ -266,7 +256,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     }
 
     const runId = getStringParam(request, "runId");
-    const entry = backupRuns.get(runId);
+    const entry = await proofPageRepository.findByRunId(runId);
 
     if (!entry) {
       response.status(404).json({ error: "proof_payload_not_found" });
@@ -285,11 +275,6 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
 
     const revokedAt =
       body.data.visibility === "revoked" ? entry.revokedAt ?? new Date().toISOString() : null;
-    const updatedEntry: BackupRunEntry = {
-      ...entry,
-      visibility: body.data.visibility,
-      revokedAt,
-    };
     if (body.data.visibility === "revoked" && entry.visibility !== "revoked") {
       await contentComplianceEventRepository.record({
         eventType: "proof_page_revoked",
@@ -306,7 +291,12 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
       });
     }
 
-    backupRuns.set(runId, updatedEntry);
+    const updatedEntry = await proofPageRepository.updateVisibility(runId, body.data.visibility, revokedAt);
+
+    if (!updatedEntry) {
+      response.status(404).json({ error: "proof_payload_not_found" });
+      return;
+    }
 
     response.json({
       runId,
@@ -315,8 +305,8 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     });
   });
 
-  app.get("/api/recovery/:runId/proof", requireAuth(sessionRepository), (request, response) => {
-    const entry = backupRuns.get(getStringParam(request, "runId"));
+  app.get("/api/recovery/:runId/proof", requireAuth(sessionRepository), async (request, response) => {
+    const entry = await proofPageRepository.findByRunId(getStringParam(request, "runId"));
 
     if (!entry) {
       response.status(404).json({ error: "proof_payload_not_found" });
