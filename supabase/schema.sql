@@ -10,6 +10,7 @@ create type public.proof_page_visibility as enum ('private', 'unlisted', 'public
 create type public.content_compliance_event_type as enum ('tweet_deleted', 'tweet_protected', 'tweet_withheld', 'tweet_changed', 'user_deleted', 'user_suspended', 'user_request_delete', 'proof_page_revoked');
 create type public.recovery_session_status as enum ('draft', 'proof_ready', 'new_account_registered', 'completed');
 create type public.health_check_reason as enum ('ok', 'not_found', 'forbidden', 'auth_failed', 'rate_limited', 'api_error', 'network_error', 'unknown');
+create type public.x_oauth_connection_status as enum ('active', 'auth_expired', 'revoked');
 
 create table public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -45,12 +46,14 @@ create table public.x_oauth_connections (
   x_account_id uuid not null references public.x_accounts(id) on delete cascade,
   provider text not null default 'x',
   scope text[] not null default '{}',
-  encrypted_access_token text not null,
-  encrypted_refresh_token text,
-  token_cipher_version text not null default 'v1',
+  access_token_ref text not null,
+  refresh_token_ref text,
+  status public.x_oauth_connection_status not null default 'active',
   expires_at timestamptz,
   refreshed_at timestamptz,
+  auth_expired_at timestamptz,
   revoked_at timestamptz,
+  failure_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (x_account_id, provider)
@@ -267,7 +270,9 @@ create policy "Users can read own manual notification queue" on public.manual_no
 
 -- x_oauth_connections and stripe_events are service-role only.
 -- Insert/update/delete are service-role only for v0.
--- Do not expose encrypted tokens, raw X payload, service role keys, or Stripe raw payloads to the frontend.
+-- Do not expose token refs, raw X payload, service role keys, or Stripe raw payloads to the frontend.
+revoke all on table public.x_oauth_connections from public, anon, authenticated;
+grant all on table public.x_oauth_connections to service_role;
 
 create or replace function public.record_api_usage_event_with_monthly_limit(
   p_id uuid,
