@@ -148,6 +148,7 @@ create table public.proof_pages (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.user_profiles(id) on delete cascade,
   x_account_id uuid not null references public.x_accounts(id) on delete cascade,
+  backup_run_id uuid not null references public.backup_runs(id) on delete cascade,
   slug text not null unique,
   visibility public.proof_page_visibility not null default 'private',
   public_payload jsonb not null default '{}'::jsonb,
@@ -155,7 +156,8 @@ create table public.proof_pages (
   published_at timestamptz,
   revoked_at timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (backup_run_id)
 );
 
 create table public.content_compliance_events (

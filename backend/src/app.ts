@@ -8,7 +8,12 @@ import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXD
 import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
-import { InMemoryProofPageRepository } from "./repositories/proofPageRepository.js";
+import {
+  InMemoryProofPageRepository,
+  SupabaseProofPageRepository,
+  type ProofPageRepository,
+  type SupabaseProofPageStore,
+} from "./repositories/proofPageRepository.js";
 import {
   InMemoryContentComplianceEventRepository,
   type ContentComplianceEventRepository,
@@ -100,6 +105,7 @@ export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
 export interface CreateAppOptions {
   xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
+  proofPageStore?: SupabaseProofPageStore;
   contentComplianceEventStore?: SupabaseContentComplianceEventStore;
 }
 
@@ -127,7 +133,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   const contentComplianceEventRepository = createContentComplianceEventRepository(config, options);
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
-  const proofPageRepository = new InMemoryProofPageRepository();
+  const proofPageRepository = createProofPageRepository(options);
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
@@ -350,9 +356,17 @@ function createContentComplianceEventRepository(
   return new SupabaseContentComplianceEventRepository(options.contentComplianceEventStore);
 }
 
+function createProofPageRepository(options: CreateAppOptions): ProofPageRepository {
+  if (options.proofPageStore) {
+    return new SupabaseProofPageRepository(options.proofPageStore);
+  }
+
+  return new InMemoryProofPageRepository();
+}
+
 async function buildAdminDatabaseSnapshot(
   userId: string,
-  proofPageRepository: InMemoryProofPageRepository,
+  proofPageRepository: ProofPageRepository,
   contentComplianceEventRepository: ContentComplianceEventRepository,
 ): Promise<AdminDatabaseSnapshot> {
   const proofEntries = await proofPageRepository.listByUser(userId);
