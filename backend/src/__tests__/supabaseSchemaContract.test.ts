@@ -11,6 +11,7 @@ const xOauthConnectionsTableSql =
   schemaSql.match(/create table public\.x_oauth_connections \([\s\S]*?\n\);/)?.[0] ?? "";
 const contentComplianceEventsTableSql =
   schemaSql.match(/create table public\.content_compliance_events \([\s\S]*?\n\);/)?.[0] ?? "";
+const proofPagesTableSql = schemaSql.match(/create table public\.proof_pages \([\s\S]*?\n\);/)?.[0] ?? "";
 const ownComplianceEventsPolicySql =
   schemaSql.match(
     /create policy "Users can read own compliance events" on public\.content_compliance_events for select using \([\s\S]*?\n\);/,
@@ -92,6 +93,24 @@ describe("Supabase schema contract", () => {
     );
     expect(ownComplianceEventsPolicySql).toContain(
       "exists (select 1 from public.x_accounts where x_accounts.id = content_compliance_events.x_account_id and x_accounts.user_id = auth.uid())",
+    );
+  });
+
+  it("defines proof pages as one persistent repository row per backup run", () => {
+    expect(proofPagesTableSql).toContain(
+      "user_id uuid not null references public.user_profiles(id) on delete cascade",
+    );
+    expect(proofPagesTableSql).toContain(
+      "x_account_id uuid not null references public.x_accounts(id) on delete cascade",
+    );
+    expect(proofPagesTableSql).toContain(
+      "backup_run_id uuid not null references public.backup_runs(id) on delete cascade",
+    );
+    expect(proofPagesTableSql).toContain("public_payload jsonb not null default '{}'::jsonb");
+    expect(proofPagesTableSql).toContain("unique (backup_run_id)");
+    expect(schemaSql).toContain("alter table public.proof_pages enable row level security;");
+    expect(schemaSql).toContain(
+      'create policy "Users can read own proof pages" on public.proof_pages for select using (auth.uid() = user_id);',
     );
   });
 });
