@@ -11,6 +11,7 @@ export interface ProofPageEntry {
 export interface ProofPageRepository {
   create(entry: ProofPageEntry): Promise<void>;
   findByRunId(runId: string): Promise<ProofPageEntry | null>;
+  listByUser(userId: string): Promise<ProofPageEntry[]>;
   updateVisibility(
     runId: string,
     visibility: ProofPageVisibility,
@@ -28,6 +29,13 @@ export class InMemoryProofPageRepository implements ProofPageRepository {
   async findByRunId(runId: string): Promise<ProofPageEntry | null> {
     const entry = this.entries.get(runId);
     return entry ? cloneProofPageEntry(entry) : null;
+  }
+
+  async listByUser(userId: string): Promise<ProofPageEntry[]> {
+    return [...this.entries.values()]
+      .filter((entry) => entry.userId === userId)
+      .sort((left, right) => right.backupRun.createdAt.localeCompare(left.backupRun.createdAt))
+      .map(cloneProofPageEntry);
   }
 
   async updateVisibility(
