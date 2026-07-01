@@ -1,4 +1,4 @@
-import type { BackupRun, ProofPublicPayload } from "../../shared/types";
+import type { AdminDatabaseSnapshot, BackupRun, ProofPublicPayload } from "../../shared/types";
 
 export interface HealthResponse {
   ok: boolean;
@@ -56,6 +56,14 @@ export async function runBackup(tweetLimit: number, sessionToken: string): Promi
       "content-type": "application/json",
     },
     body: JSON.stringify({ tweetLimit }),
+  });
+}
+
+export async function fetchAdminDatabaseSnapshot(sessionToken: string): Promise<AdminDatabaseSnapshot> {
+  return requestJson<AdminDatabaseSnapshot>("/api/admin/database-snapshot", {
+    headers: {
+      authorization: `Bearer ${sessionToken}`,
+    },
   });
 }
 

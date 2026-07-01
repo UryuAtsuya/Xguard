@@ -23,6 +23,7 @@ import {
   createDefaultXOAuthTokenExchangeService,
   type XOAuthTokenExchangeService,
 } from "./services/xOAuthTokenExchangeService.js";
+import type { AdminDatabaseSnapshot, AdminDatabaseTableSummary, ContentComplianceEvent } from "../../shared/types.js";
 
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
@@ -247,6 +248,11 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     response.json(entry.backupRun);
   });
 
+  app.get("/api/admin/database-snapshot", requireAuth(sessionRepository), async (request, response) => {
+    response.set("Cache-Control", "no-store");
+    response.json(await buildAdminDatabaseSnapshot(getAuthenticatedUserId(request), proofPageRepository, contentComplianceEventRepository));
+  });
+
   app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), async (request, response) => {
     const body = z.object({ visibility: z.enum(["unlisted", "public", "revoked"]) }).safeParse(request.body ?? {});
 
@@ -342,6 +348,54 @@ function createContentComplianceEventRepository(
   }
 
   return new SupabaseContentComplianceEventRepository(options.contentComplianceEventStore);
+}
+
+async function buildAdminDatabaseSnapshot(
+  userId: string,
+  proofPageRepository: InMemoryProofPageRepository,
+  contentComplianceEventRepository: ContentComplianceEventRepository,
+): Promise<AdminDatabaseSnapshot> {
+  const proofEntries = await proofPageRepository.listByUser(userId);
+  const xAccountIds = [...new Set(proofEntries.map((entry) => entry.backupRun.xAccountId))];
+  const contentComplianceEvents = (
+    await Promise.all(xAccountIds.map((xAccountId) => contentComplianceEventRepository.listByXAccount(xAccountId)))
+  ).flat();
+  const backupRuns = proofEntries.map((entry) => entry.backupRun);
+  const proofPages = proofEntries.map((entry) => ({
+    runId: entry.backupRun.id,
+    userId: entry.userId,
+    xAccountId: entry.backupRun.xAccountId,
+    visibility: entry.visibility,
+    revokedAt: entry.revokedAt,
+    createdAt: entry.backupRun.createdAt,
+    updatedAt: entry.revokedAt ?? entry.backupRun.completedAt ?? entry.backupRun.createdAt,
+  }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    tables: [
+      tableSummary("backup_runs", backupRuns.length, backupRuns.map((run) => run.completedAt ?? run.createdAt)),
+      tableSummary("proof_pages", proofPages.length, proofPages.map((proofPage) => proofPage.updatedAt)),
+      tableSummary("content_compliance_events", contentComplianceEvents.length, contentComplianceEvents.map((event) => event.createdAt)),
+    ],
+    backupRuns,
+    proofPages,
+    contentComplianceEvents: contentComplianceEvents.sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+  };
+}
+
+function tableSummary(
+  name: string,
+  rowCount: number,
+  updatedAtValues: Array<string | undefined>,
+): AdminDatabaseTableSummary {
+  return {
+    name,
+    rowCount,
+    source: "repository",
+    writable: false,
+    lastUpdatedAt: updatedAtValues.filter((value): value is string => Boolean(value)).sort().at(-1),
+  };
 }
 
 interface AuthenticatedRequest extends Request {

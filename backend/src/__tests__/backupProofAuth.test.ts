@@ -34,6 +34,10 @@ describe("backup and proof auth boundary", () => {
       statusCode: 401,
       body: { error: "authentication_required" },
     });
+    expect(await invokeRoute(app, "get", "/api/admin/database-snapshot")).toMatchObject({
+      statusCode: 401,
+      body: { error: "authentication_required" },
+    });
   });
 
   it("lets an owner create and read their backup status", async () => {
@@ -52,6 +56,37 @@ describe("backup and proof auth boundary", () => {
 
     expect(backupResponse.statusCode).toBe(201);
     expect(statusResponse.statusCode).toBeUndefined();
+  });
+
+  it("lets an owner inspect database snapshot rows without token material", async () => {
+    const app = createApp();
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+    await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "revoked" },
+      params: { runId },
+    });
+
+    const snapshotResponse = await invokeRoute(app, "get", "/api/admin/database-snapshot", {
+      authorization: `Bearer ${sessionToken}`,
+    });
+
+    expect(snapshotResponse.statusCode).toBeUndefined();
+    expect(snapshotResponse.headers).toEqual({ "cache-control": "no-store" });
+    expect(snapshotResponse.body).toMatchObject({
+      tables: [
+        { name: "backup_runs", rowCount: 1, source: "repository", writable: false },
+        { name: "proof_pages", rowCount: 1, source: "repository", writable: false },
+        { name: "content_compliance_events", rowCount: 1, source: "repository", writable: false },
+      ],
+      backupRuns: [expect.objectContaining({ id: runId, status: "completed" })],
+      proofPages: [expect.objectContaining({ runId, visibility: "revoked" })],
+      contentComplianceEvents: [expect.objectContaining({ eventType: "proof_page_revoked" })],
+    });
+    expect(JSON.stringify(snapshotResponse.body)).not.toContain("vault://");
+    expect(JSON.stringify(snapshotResponse.body)).not.toContain("accessToken");
+    expect(JSON.stringify(snapshotResponse.body)).not.toContain("refreshToken");
   });
 
   it("keeps proof payload private by default", async () => {

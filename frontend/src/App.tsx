@@ -4,6 +4,7 @@ import {
   Bell,
   ChevronRight,
   Clock3,
+  Database,
   DatabaseBackup,
   EyeOff,
   FileCheck2,
@@ -17,8 +18,16 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { BackupRun, ProofPublicPayload } from "../../shared/types";
-import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse, type OAuthStartResponse } from "./api";
+import type { AdminDatabaseSnapshot, BackupRun, ProofPublicPayload } from "../../shared/types";
+import {
+  completeOAuthCallback,
+  fetchAdminDatabaseSnapshot,
+  fetchHealth,
+  runBackup,
+  startOAuth,
+  type HealthResponse,
+  type OAuthStartResponse,
+} from "./api";
 
 type Step = "snapshot" | "connect" | "backup" | "proof";
 type View = "home" | "admin" | "proof";
@@ -31,6 +40,8 @@ export function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [backupRun, setBackupRun] = useState<BackupRun | null>(null);
   const [proof, setProof] = useState<ProofPublicPayload | null>(null);
+  const [adminSnapshot, setAdminSnapshot] = useState<AdminDatabaseSnapshot | null>(null);
+  const [adminSnapshotStatus, setAdminSnapshotStatus] = useState("X接続後にDB snapshotを読み込み");
   const [isBusy, setIsBusy] = useState(false);
   const [notice, setNotice] = useState("API状態を確認中");
 
@@ -44,6 +55,22 @@ export function App() {
         setNotice("API未接続: npm run dev:api を確認");
       });
   }, []);
+
+  async function refreshAdminSnapshot(nextSessionToken = sessionToken) {
+    if (!nextSessionToken) {
+      setAdminSnapshot(null);
+      setAdminSnapshotStatus("X接続後にDB snapshotを読み込み");
+      return;
+    }
+
+    try {
+      const snapshot = await fetchAdminDatabaseSnapshot(nextSessionToken);
+      setAdminSnapshot(snapshot);
+      setAdminSnapshotStatus("DB snapshotを取得済み");
+    } catch {
+      setAdminSnapshotStatus("DB snapshot取得に失敗");
+    }
+  }
 
   const readiness = useMemo(() => {
     if (backupRun?.status === "completed") {
@@ -69,6 +96,7 @@ export function App() {
       if (response.mode === "mock") {
         const callback = await completeOAuthCallback("mock-authorization-code", response.state);
         setSessionToken(callback.sessionToken);
+        void refreshAdminSnapshot(callback.sessionToken);
         setNotice("mock OAuthで接続済み");
       } else {
         setNotice("OAuth設定済み");
@@ -94,6 +122,7 @@ export function App() {
       const response = await runBackup(25, sessionToken);
       setBackupRun(response.backupRun);
       setProof(response.proofPayload);
+      void refreshAdminSnapshot(sessionToken);
       setActiveStep("proof");
       setActiveView("proof");
       setNotice("証明ページDTOを作成済み");
@@ -218,6 +247,8 @@ export function App() {
               <InfoRow label="Automation" value="No post / DM / follow" />
             </aside>
           </div>
+
+          <DatabasePanel snapshot={adminSnapshot} status={adminSnapshotStatus} />
         </section>
 
         <section className="proof-panel" aria-label="証明レビュー" data-active={activeView === "proof"}>
@@ -356,6 +387,38 @@ function EmptyProof() {
   );
 }
 
+function DatabasePanel({ snapshot, status }: { snapshot: AdminDatabaseSnapshot | null; status: string }) {
+  const latestBackup = snapshot?.backupRuns[0];
+  const latestEvent = snapshot?.contentComplianceEvents[0];
+
+  return (
+    <section className="database-panel" aria-label="Database snapshot">
+      <div className="panel-header">
+        <span>Database</span>
+        <Database aria-hidden="true" size={18} />
+      </div>
+      <div className="database-summary" aria-live="polite">
+        <InfoRow label="Snapshot" value={status} />
+        <InfoRow label="Generated" value={snapshot ? formatDateTime(snapshot.generatedAt) : "not loaded"} />
+      </div>
+      <div className="database-table-list">
+        {(snapshot?.tables ?? emptyTables).map((table) => (
+          <article className="database-table-card" key={table.name}>
+            <span>{table.name}</span>
+            <strong>{table.rowCount}</strong>
+            <small>{table.lastUpdatedAt ? formatDateTime(table.lastUpdatedAt) : "no rows"}</small>
+          </article>
+        ))}
+      </div>
+      <div className="database-rows">
+        <ReviewItem title="Latest backup" value={latestBackup ? `${latestBackup.status} / ${latestBackup.tweetsCaptured} posts` : "none"} />
+        <ReviewItem title="Proof pages" value={snapshot ? `${snapshot.proofPages.length} rows` : "none"} />
+        <ReviewItem title="Latest compliance" value={latestEvent?.eventType ?? "none"} />
+      </div>
+    </section>
+  );
+}
+
 function ReviewItem({ title, value }: { title: string; value: string }) {
   return (
     <div className="review-item">
@@ -377,3 +440,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function formatCost(value: number) {
   return `$${value.toFixed(2)}`;
 }
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+const emptyTables = [
+  { name: "backup_runs", rowCount: 0, source: "repository", writable: false },
+  { name: "proof_pages", rowCount: 0, source: "repository", writable: false },
+  { name: "content_compliance_events", rowCount: 0, source: "repository", writable: false },
+] satisfies AdminDatabaseSnapshot["tables"];

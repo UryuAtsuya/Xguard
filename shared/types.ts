@@ -253,3 +253,27 @@ export interface ManualNotificationQueueItem {
   reviewedAt?: string;
   createdAt: string;
 }
+
+export interface AdminDatabaseTableSummary {
+  name: string;
+  rowCount: number;
+  source: "repository" | "supabase";
+  writable: boolean;
+  lastUpdatedAt?: string;
+}
+
+export interface AdminDatabaseSnapshot {
+  generatedAt: string;
+  tables: AdminDatabaseTableSummary[];
+  backupRuns: BackupRun[];
+  proofPages: Array<{
+    runId: string;
+    userId: string;
+    xAccountId: string;
+    visibility: ProofPageVisibility;
+    revokedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  contentComplianceEvents: ContentComplianceEvent[];
+}
