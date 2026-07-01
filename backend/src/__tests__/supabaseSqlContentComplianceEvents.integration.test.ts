@@ -58,11 +58,16 @@ describeIfIntegration("Supabase SQL content compliance events contract", () => {
         ('${ids.xAccountId}'::uuid, '${ids.userId}'::uuid, 'x-compliance-${ids.suffix}', 'compliance_user_${ids.shortSuffix}'),
         ('${ids.otherXAccountId}'::uuid, '${ids.otherUserId}'::uuid, 'x-compliance-other-${ids.suffix}', 'compliance_other_${ids.shortSuffix}');
 
-      insert into public.proof_pages (id, user_id, x_account_id, slug, visibility, public_payload) values
+      insert into public.backup_runs (id, x_account_id, status, tweet_limit, tweets_captured, profiles_captured, api_units_used, estimated_cost_usd) values
+        ('${ids.backupRunId}'::uuid, '${ids.xAccountId}'::uuid, 'completed', 100, 1, 1, 1, 0.01),
+        ('${ids.otherBackupRunId}'::uuid, '${ids.otherXAccountId}'::uuid, 'completed', 100, 1, 1, 1, 0.01);
+
+      insert into public.proof_pages (id, user_id, x_account_id, backup_run_id, slug, visibility, public_payload) values
         (
           '${ids.proofPageId}'::uuid,
           '${ids.userId}'::uuid,
           '${ids.xAccountId}'::uuid,
+          '${ids.backupRunId}'::uuid,
           'compliance-proof-${ids.suffix}',
           'revoked',
           '{"title":"Revoked proof page"}'::jsonb
@@ -71,6 +76,7 @@ describeIfIntegration("Supabase SQL content compliance events contract", () => {
           '${ids.otherProofPageId}'::uuid,
           '${ids.otherUserId}'::uuid,
           '${ids.otherXAccountId}'::uuid,
+          '${ids.otherBackupRunId}'::uuid,
           'compliance-proof-other-${ids.suffix}',
           'revoked',
           '{"title":"Other revoked proof page"}'::jsonb
@@ -270,6 +276,8 @@ function createFixtureIds(): Record<string, string> & { suffix: string; shortSuf
     otherUserId: randomUUID(),
     xAccountId: randomUUID(),
     otherXAccountId: randomUUID(),
+    backupRunId: randomUUID(),
+    otherBackupRunId: randomUUID(),
     proofPageId: randomUUID(),
     otherProofPageId: randomUUID(),
     allowedEventId: randomUUID(),

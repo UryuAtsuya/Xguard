@@ -8,6 +8,12 @@ import type {
   SupabaseContentComplianceEventRow,
   SupabaseContentComplianceEventStore,
 } from "../repositories/supabaseContentComplianceEventRepository.js";
+import type {
+  SupabaseProofPageEntryRow,
+  SupabaseProofPageRow,
+  SupabaseProofPageStore,
+} from "../repositories/proofPageRepository.js";
+import type { SupabaseBackupRunRow } from "../repositories/supabaseApiUsageLedgerRepository.js";
 
 describe("backup and proof auth boundary", () => {
   it("rejects unauthenticated backup and proof access", async () => {
@@ -56,6 +62,37 @@ describe("backup and proof auth boundary", () => {
 
     expect(backupResponse.statusCode).toBe(201);
     expect(statusResponse.statusCode).toBeUndefined();
+  });
+
+  it("routes proof page persistence through the configured Supabase repository", async () => {
+    const proofPageStore = new RecordingSupabaseProofPageStore();
+    const app = createApp(createRuntimeConfig(), { proofPageStore });
+    const sessionToken = await createSession(app);
+    const runId = await createBackupRun(app, sessionToken);
+
+    const visibilityResponse = await invokeRoute(app, "patch", "/api/recovery/:runId/proof/visibility", {
+      authorization: `Bearer ${sessionToken}`,
+      body: { visibility: "public" },
+      params: { runId },
+    });
+    const proofResponse = await invokeRoute(app, "get", "/api/recovery/:runId/proof", {
+      authorization: `Bearer ${sessionToken}`,
+      params: { runId },
+    });
+
+    expect(proofPageStore.rows).toHaveLength(1);
+    expect(proofPageStore.rows[0]?.proof_page).toMatchObject({
+      backup_run_id: runId,
+      user_id: "user_fixture_001",
+      visibility: "public",
+      public_payload: expect.objectContaining({
+        redactionPolicyVersion: "v1",
+      }),
+    });
+    expect(visibilityResponse.body).toMatchObject({ runId, visibility: "public", revokedAt: null });
+    expect(proofResponse.statusCode).toBeUndefined();
+    expect(JSON.stringify(proofResponse.body)).not.toContain("accessToken");
+    expect(JSON.stringify(proofResponse.body)).not.toContain("refreshToken");
   });
 
   it("lets an owner inspect database snapshot rows without token material", async () => {
@@ -544,6 +581,61 @@ async function getProofPageComplianceEvents(app: ReturnType<typeof createApp>): 
   return repository.listByXAccount("11111111-1111-4111-8111-111111111111");
 }
 
+class RecordingSupabaseProofPageStore implements SupabaseProofPageStore {
+  readonly rows: SupabaseProofPageEntryRow[] = [];
+
+  async insertProofPage(row: {
+    backup_run: SupabaseBackupRunRow;
+    proof_page: Omit<SupabaseProofPageRow, "id" | "created_at" | "updated_at"> & {
+      id?: string;
+      created_at?: string;
+      updated_at?: string;
+    };
+  }): Promise<SupabaseProofPageEntryRow> {
+    const storedRow: SupabaseProofPageEntryRow = {
+      backup_run: { ...row.backup_run },
+      proof_page: {
+        ...row.proof_page,
+        id: row.proof_page.id ?? randomUUID(),
+        created_at: row.proof_page.created_at ?? row.backup_run.created_at,
+        updated_at: row.proof_page.updated_at ?? row.backup_run.completed_at ?? row.backup_run.created_at,
+      },
+    };
+    this.rows.push(cloneProofPageEntryRow(storedRow));
+    return cloneProofPageEntryRow(storedRow);
+  }
+
+  async findProofPageByRunId(runId: string): Promise<SupabaseProofPageEntryRow | null> {
+    const row = this.rows.find((entry) => entry.proof_page.backup_run_id === runId);
+    return row ? cloneProofPageEntryRow(row) : null;
+  }
+
+  async listProofPagesByUser(userId: string): Promise<SupabaseProofPageEntryRow[]> {
+    return this.rows
+      .filter((entry) => entry.proof_page.user_id === userId)
+      .sort((left, right) => right.proof_page.created_at.localeCompare(left.proof_page.created_at))
+      .map(cloneProofPageEntryRow);
+  }
+
+  async updateProofPageVisibility(input: {
+    backup_run_id: string;
+    visibility: SupabaseProofPageRow["visibility"];
+    revoked_at: string | null;
+    updated_at: string;
+  }): Promise<SupabaseProofPageEntryRow | null> {
+    const row = this.rows.find((entry) => entry.proof_page.backup_run_id === input.backup_run_id);
+
+    if (!row) {
+      return null;
+    }
+
+    row.proof_page.visibility = input.visibility;
+    row.proof_page.revoked_at = input.revoked_at ?? undefined;
+    row.proof_page.updated_at = input.updated_at;
+    return cloneProofPageEntryRow(row);
+  }
+}
+
 class RecordingSupabaseContentComplianceEventStore implements SupabaseContentComplianceEventStore {
   readonly rows: SupabaseContentComplianceEventRow[] = [];
 
@@ -567,4 +659,24 @@ class RecordingSupabaseContentComplianceEventStore implements SupabaseContentCom
       .filter((row) => row.x_account_id === xAccountId)
       .map((row) => ({ ...row, details: { ...row.details } }));
   }
+}
+
+function cloneProofPageEntryRow(row: SupabaseProofPageEntryRow): SupabaseProofPageEntryRow {
+  return {
+    backup_run: { ...row.backup_run },
+    proof_page: {
+      ...row.proof_page,
+      public_payload: {
+        ...row.proof_page.public_payload,
+        snapshotCounts: { ...row.proof_page.public_payload.snapshotCounts },
+        publicMetrics: row.proof_page.public_payload.publicMetrics
+          ? { ...row.proof_page.public_payload.publicMetrics }
+          : undefined,
+        representativeTweets: row.proof_page.public_payload.representativeTweets.map((tweet) => ({
+          ...tweet,
+          publicMetrics: tweet.publicMetrics ? { ...tweet.publicMetrics } : undefined,
+        })),
+      },
+    },
+  };
 }
