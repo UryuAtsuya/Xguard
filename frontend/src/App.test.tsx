@@ -1,16 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { completeOAuthCallback, fetchHealth, runBackup, startOAuth } from "./api";
+import { completeOAuthCallback, fetchAdminDatabaseSnapshot, fetchHealth, runBackup, startOAuth } from "./api";
 
 vi.mock("./api", () => ({
   completeOAuthCallback: vi.fn(),
+  fetchAdminDatabaseSnapshot: vi.fn(),
   fetchHealth: vi.fn(),
   startOAuth: vi.fn(),
   runBackup: vi.fn(),
 }));
 
 const mockedCompleteOAuthCallback = vi.mocked(completeOAuthCallback);
+const mockedFetchAdminDatabaseSnapshot = vi.mocked(fetchAdminDatabaseSnapshot);
 const mockedFetchHealth = vi.mocked(fetchHealth);
 const mockedStartOAuth = vi.mocked(startOAuth);
 const mockedRunBackup = vi.mocked(runBackup);
@@ -48,6 +50,59 @@ describe("App", () => {
       sessionToken: "session-token-1",
       tokenStorage: "repository-ref-only",
       writesEnabled: false,
+    });
+    mockedFetchAdminDatabaseSnapshot.mockResolvedValue({
+      generatedAt: "2026-05-28T00:00:02.000Z",
+      tables: [
+        {
+          name: "backup_runs",
+          rowCount: 1,
+          source: "repository",
+          writable: false,
+          lastUpdatedAt: "2026-05-28T00:00:01.000Z",
+        },
+        {
+          name: "proof_pages",
+          rowCount: 1,
+          source: "repository",
+          writable: false,
+          lastUpdatedAt: "2026-05-28T00:00:01.000Z",
+        },
+        {
+          name: "content_compliance_events",
+          rowCount: 0,
+          source: "repository",
+          writable: false,
+        },
+      ],
+      backupRuns: [
+        {
+          id: "backup-1",
+          xAccountId: "xacct_fixture_001",
+          status: "completed",
+          startedAt: "2026-05-28T00:00:00.000Z",
+          completedAt: "2026-05-28T00:00:01.000Z",
+          tweetLimit: 25,
+          tweetsCaptured: 2,
+          profilesCaptured: 1,
+          apiUnitsUsed: 3,
+          estimatedCostUsd: 0.02,
+          rateLimitRemaining: 1499,
+          createdAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
+      proofPages: [
+        {
+          runId: "backup-1",
+          userId: "user_fixture_001",
+          xAccountId: "xacct_fixture_001",
+          visibility: "private",
+          revokedAt: null,
+          createdAt: "2026-05-28T00:00:00.000Z",
+          updatedAt: "2026-05-28T00:00:01.000Z",
+        },
+      ],
+      contentComplianceEvents: [],
     });
 
     mockedRunBackup.mockResolvedValue({
@@ -119,6 +174,20 @@ describe("App", () => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "session-token-1");
       expect(screen.getByText("@xguard_creator")).toBeInTheDocument();
       expect(screen.getByText("証明ページDTOを作成済み")).toBeInTheDocument();
+    });
+  });
+
+  it("shows database snapshot tables in the admin console", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Xを安全に接続/ }));
+
+    await waitFor(() => {
+      expect(mockedFetchAdminDatabaseSnapshot).toHaveBeenCalledWith("session-token-1");
+      expect(screen.getByText("backup_runs")).toBeInTheDocument();
+      expect(screen.getByText("proof_pages")).toBeInTheDocument();
+      expect(screen.getByText("content_compliance_events")).toBeInTheDocument();
+      expect(screen.getByText("DB snapshotを取得済み")).toBeInTheDocument();
     });
   });
 });

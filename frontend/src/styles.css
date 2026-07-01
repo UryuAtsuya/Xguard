@@ -314,6 +314,57 @@ h2 {
   grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
 }
 
+.database-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.database-summary,
+.database-rows {
+  display: grid;
+  gap: 0;
+}
+
+.database-table-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.database-table-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.database-table-card span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.database-table-card strong {
+  color: var(--surface-strong);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.database-table-card small {
+  color: var(--subtle);
+  font-size: 12px;
+}
+
 .screen-card,
 .ops-panel,
 .timeline-panel {
@@ -494,6 +545,7 @@ h2 {
 
   .home-panel,
   .admin-grid,
+  .database-table-list,
   .proof-layout {
     grid-template-columns: 1fr;
   }
