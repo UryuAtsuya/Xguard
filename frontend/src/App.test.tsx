@@ -151,7 +151,8 @@ describe("App", () => {
 
       expect(screen.getByRole("heading", { name: "Xの信用資産を、静かに守る。" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "管理側" })).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "管理側の画面" })).not.toBeInTheDocument();
 
       await waitFor(() => {
         expect(screen.getByText("mock APIに接続済み")).toBeInTheDocument();
@@ -172,7 +173,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "session-token-1");
-      expect(screen.getByText("@xguard_creator")).toBeInTheDocument();
+      expect(screen.getAllByText("@xguard_creator").length).toBeGreaterThan(0);
       expect(screen.getByText("証明ページDTOを作成済み")).toBeInTheDocument();
     });
   });
@@ -181,13 +182,15 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: /Xを安全に接続/ }));
+    fireEvent.click(screen.getByRole("button", { name: "管理側" }));
 
     await waitFor(() => {
       expect(mockedFetchAdminDatabaseSnapshot).toHaveBeenCalledWith("session-token-1");
+      expect(screen.getByRole("region", { name: "管理側の画面" })).toBeInTheDocument();
       expect(screen.getByText("backup_runs")).toBeInTheDocument();
       expect(screen.getByText("proof_pages")).toBeInTheDocument();
       expect(screen.getByText("content_compliance_events")).toBeInTheDocument();
-      expect(screen.getByText("DB snapshotを取得済み")).toBeInTheDocument();
+      expect(screen.getAllByText("DB snapshotを取得済み").length).toBeGreaterThan(0);
     });
   });
 });
