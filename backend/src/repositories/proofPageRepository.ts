@@ -1,5 +1,10 @@
 import type { BackupRun, ProofPageVisibility, ProofPublicPayload } from "../../../shared/types.js";
+import type {
+  ContentComplianceEventRepository,
+  NewContentComplianceEvent,
+} from "./contentComplianceEventRepository.js";
 import type { SupabaseBackupRunRow } from "./supabaseApiUsageLedgerRepository.js";
+import type { SupabaseContentComplianceEventRow } from "./supabaseContentComplianceEventRepository.js";
 
 export interface ProofPageEntry {
   userId: string;
@@ -17,6 +22,12 @@ export interface ProofPageRepository {
     runId: string,
     visibility: ProofPageVisibility,
     revokedAt: string | null,
+  ): Promise<ProofPageEntry | null>;
+  updateVisibilityAndRecordComplianceEvent?(
+    runId: string,
+    visibility: ProofPageVisibility,
+    revokedAt: string | null,
+    revocationEvent: NewContentComplianceEvent,
   ): Promise<ProofPageEntry | null>;
 }
 
@@ -58,6 +69,7 @@ export class InMemoryProofPageRepository implements ProofPageRepository {
     this.entries.set(runId, updatedEntry);
     return cloneProofPageEntry(updatedEntry);
   }
+
 }
 
 export interface SupabaseProofPageRow {
@@ -96,6 +108,18 @@ export interface SupabaseProofPageStore {
     visibility: ProofPageVisibility;
     revoked_at: string | null;
     updated_at: string;
+  }): Promise<SupabaseProofPageEntryRow | null>;
+  updateProofPageVisibilityAndRecordContentComplianceEvent(input: {
+    proof_page: {
+      backup_run_id: string;
+      visibility: ProofPageVisibility;
+      revoked_at: string | null;
+      updated_at: string;
+    };
+    content_compliance_event: Omit<SupabaseContentComplianceEventRow, "id" | "created_at"> & {
+      id?: string;
+      created_at?: string;
+    };
   }): Promise<SupabaseProofPageEntryRow | null>;
 }
 
@@ -141,6 +165,34 @@ export class SupabaseProofPageRepository implements ProofPageRepository {
       visibility,
       revoked_at: revokedAt,
       updated_at: revokedAt ?? new Date().toISOString(),
+    });
+    return row ? rowToProofPageEntry(row) : null;
+  }
+
+  async updateVisibilityAndRecordComplianceEvent(
+    runId: string,
+    visibility: ProofPageVisibility,
+    revokedAt: string | null,
+    revocationEvent: NewContentComplianceEvent,
+  ): Promise<ProofPageEntry | null> {
+    const row = await this.store.updateProofPageVisibilityAndRecordContentComplianceEvent({
+      proof_page: {
+        backup_run_id: runId,
+        visibility,
+        revoked_at: revokedAt,
+        updated_at: revokedAt ?? new Date().toISOString(),
+      },
+      content_compliance_event: {
+        id: revocationEvent.id,
+        x_account_id: revocationEvent.xAccountId,
+        tweet_snapshot_id: revocationEvent.tweetSnapshotId,
+        proof_page_id: revocationEvent.proofPageId,
+        event_type: revocationEvent.eventType,
+        source: revocationEvent.source,
+        details: { ...revocationEvent.details },
+        resolved_at: revocationEvent.resolvedAt,
+        created_at: revocationEvent.createdAt,
+      },
     });
     return row ? rowToProofPageEntry(row) : null;
   }
