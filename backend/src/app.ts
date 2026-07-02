@@ -133,7 +133,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   const contentComplianceEventRepository = createContentComplianceEventRepository(config, options);
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
-  const proofPageRepository = createProofPageRepository(config, options);
+  const proofPageRepository = createProofPageRepository(options);
 
   app.use(cors(buildCorsOptions(config)));
   app.use(express.json());
@@ -287,40 +287,27 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
 
     const revokedAt =
       body.data.visibility === "revoked" ? entry.revokedAt ?? new Date().toISOString() : null;
-    const revocationEvent =
-      body.data.visibility === "revoked" && entry.visibility !== "revoked"
-        ? {
-            eventType: "proof_page_revoked" as const,
-            source: "user_request" as const,
-            xAccountId: entry.backupRun.xAccountId,
-            details: {
-              runId,
-              userId: entry.userId,
-              previousVisibility: entry.visibility,
-              newVisibility: "revoked",
-              occurredAt: revokedAt!,
-            },
-            createdAt: new Date().toISOString(),
-          }
-        : undefined;
+    if (body.data.visibility === "revoked" && entry.visibility !== "revoked") {
+      await contentComplianceEventRepository.record({
+        eventType: "proof_page_revoked",
+        source: "user_request",
+        xAccountId: entry.backupRun.xAccountId,
+        details: {
+          runId,
+          userId: entry.userId,
+          previousVisibility: entry.visibility,
+          newVisibility: "revoked",
+          occurredAt: revokedAt!,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
 
-    const updatedEntry =
-      revocationEvent && proofPageRepository.updateVisibilityAndRecordComplianceEvent
-        ? await proofPageRepository.updateVisibilityAndRecordComplianceEvent(
-            runId,
-            body.data.visibility,
-            revokedAt,
-            revocationEvent,
-          )
-        : await proofPageRepository.updateVisibility(runId, body.data.visibility, revokedAt);
+    const updatedEntry = await proofPageRepository.updateVisibility(runId, body.data.visibility, revokedAt);
 
     if (!updatedEntry) {
       response.status(404).json({ error: "proof_payload_not_found" });
       return;
-    }
-
-    if (revocationEvent && !proofPageRepository.updateVisibilityAndRecordComplianceEvent) {
-      await contentComplianceEventRepository.record(revocationEvent);
     }
 
     response.json({
@@ -369,16 +356,9 @@ function createContentComplianceEventRepository(
   return new SupabaseContentComplianceEventRepository(options.contentComplianceEventStore);
 }
 
-function createProofPageRepository(
-  config: RuntimeConfig,
-  options: CreateAppOptions,
-): ProofPageRepository {
+function createProofPageRepository(options: CreateAppOptions): ProofPageRepository {
   if (options.proofPageStore) {
     return new SupabaseProofPageRepository(options.proofPageStore);
-  }
-
-  if (config.contentComplianceEventRepository === "supabase") {
-    throw new Error("invalid_runtime_env:PROOF_PAGE_REPOSITORY_TRANSACTION_STORE");
   }
 
   return new InMemoryProofPageRepository();
