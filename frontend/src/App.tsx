@@ -1,4 +1,4 @@
-import { Building2, ShieldCheck, UserRound } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { BackupRun, ProofPublicPayload } from "../../shared/types";
 import { AdminConsole } from "./AdminConsole";
@@ -16,8 +16,12 @@ import type { AdminSnapshotState } from "./types";
 
 type AudienceView = "customer" | "admin";
 
+function getAudienceView(): AudienceView {
+  return window.location.pathname.startsWith("/admin") ? "admin" : "customer";
+}
+
 export function App() {
-  const [activeView, setActiveView] = useState<AudienceView>("customer");
+  const [activeView, setActiveView] = useState<AudienceView>(() => getAudienceView());
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [oauth, setOauth] = useState<OAuthStartResponse | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -29,6 +33,20 @@ export function App() {
   });
   const [isBusy, setIsBusy] = useState(false);
   const [notice, setNotice] = useState("API状態を確認中");
+
+  useEffect(() => {
+    function handlePopState() {
+      setActiveView(getAudienceView());
+    }
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    document.title = activeView === "admin" ? "XGuard Admin Console" : "XGuard";
+  }, [activeView]);
 
   useEffect(() => {
     fetchHealth()
@@ -115,21 +133,14 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${activeView === "admin" ? "admin-view" : "customer-view"}`}>
       <header className="app-header">
         <div className="brand-mark">
           <ShieldCheck aria-hidden="true" size={22} />
           <span>XGuard</span>
         </div>
-        <nav className="audience-switcher" aria-label="画面種別">
-          <button type="button" aria-pressed={activeView === "customer"} onClick={() => setActiveView("customer")}>
-            <UserRound aria-hidden="true" size={16} />
-            相手側
-          </button>
-          <button type="button" aria-pressed={activeView === "admin"} onClick={() => setActiveView("admin")}>
-            <Building2 aria-hidden="true" size={16} />
-            管理側
-          </button>
+        <nav className="audience-links" aria-label="画面リンク">
+          {activeView === "admin" ? <a href="/">顧客画面を確認</a> : <a href="/admin">管理画面</a>}
         </nav>
       </header>
 

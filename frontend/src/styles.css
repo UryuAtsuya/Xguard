@@ -44,6 +44,10 @@ p {
   padding: 18px 0 48px;
 }
 
+.app-shell.customer-view {
+  width: min(1120px, calc(100% - 32px));
+}
+
 .app-header {
   position: sticky;
   top: 12px;
@@ -60,8 +64,8 @@ p {
 }
 
 .brand-mark,
-.audience-switcher,
-.audience-switcher button,
+.audience-links,
+.audience-links a,
 .primary-action,
 .secondary-action,
 .icon-button {
@@ -80,31 +84,21 @@ p {
   color: var(--teal);
 }
 
-.audience-switcher {
-  gap: 4px;
-  padding: 4px;
+.audience-links {
+  gap: 8px;
+}
+
+.audience-links a {
+  justify-content: center;
+  min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface-muted);
-}
-
-.audience-switcher button {
-  justify-content: center;
-  gap: 8px;
-  min-height: 38px;
-  min-width: 112px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-weight: 850;
-}
-
-.audience-switcher button[aria-pressed="true"] {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 8px 20px rgba(25, 34, 44, 0.09);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 850;
+  text-decoration: none;
 }
 
 .customer-portal {
@@ -546,8 +540,8 @@ h2 {
     flex-direction: column;
   }
 
-  .audience-switcher,
-  .audience-switcher button,
+  .audience-links,
+  .audience-links a,
   .toolbar-actions,
   .hero-actions {
     width: 100%;
@@ -574,11 +568,6 @@ h2 {
 @media (max-width: 520px) {
   .app-shell {
     width: calc(100% - 12px);
-  }
-
-  .audience-switcher {
-    display: grid;
-    grid-template-columns: 1fr;
   }
 
   .customer-hero,
