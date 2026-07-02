@@ -303,13 +303,14 @@ describe("backup and proof auth boundary", () => {
     expect(Date.parse(events[0].createdAt)).not.toBeNaN();
   });
 
-  it("routes proof revocation compliance events through the configured Supabase repository", async () => {
-    const store = new RecordingSupabaseContentComplianceEventStore();
+  it("routes proof revocation compliance events through the configured Supabase proof page transaction store", async () => {
+    const contentComplianceEventStore = new RecordingSupabaseContentComplianceEventStore();
+    const proofPageStore = new RecordingSupabaseProofPageStore();
     const app = createApp(
       createRuntimeConfig({
         CONTENT_COMPLIANCE_EVENT_REPOSITORY: "supabase",
       }),
-      { contentComplianceEventStore: store },
+      { contentComplianceEventStore, proofPageStore },
     );
     const sessionToken = "test-session-proof-supabase-revocation";
     await app.locals.sessionRepository.save(sessionToken, "user_proof_supabase_revocation");
@@ -321,18 +322,37 @@ describe("backup and proof auth boundary", () => {
       params: { runId },
     });
 
-    expect(store.rows).toHaveLength(1);
-    expect(store.rows[0]).toMatchObject({
-      x_account_id: "11111111-1111-4111-8111-111111111111",
-      event_type: "proof_page_revoked",
-      source: "user_request",
-      details: {
-        runId,
-        userId: "user_proof_supabase_revocation",
-        previousVisibility: "private",
-        newVisibility: "revoked",
+    expect(proofPageStore.visibilityUpdates).toHaveLength(0);
+    expect(proofPageStore.revocationTransactions).toHaveLength(1);
+    expect(proofPageStore.revocationTransactions[0]).toMatchObject({
+      proof_page: {
+        backup_run_id: runId,
+        visibility: "revoked",
+      },
+      content_compliance_event: {
+        x_account_id: "11111111-1111-4111-8111-111111111111",
+        event_type: "proof_page_revoked",
+        source: "user_request",
+        details: {
+          runId,
+          userId: "user_proof_supabase_revocation",
+          previousVisibility: "private",
+          newVisibility: "revoked",
+        },
       },
     });
+    expect(contentComplianceEventStore.rows).toHaveLength(0);
+  });
+
+  it("fails startup when Supabase compliance storage lacks a proof page transaction store", () => {
+    expect(() =>
+      createApp(
+        createRuntimeConfig({
+          CONTENT_COMPLIANCE_EVENT_REPOSITORY: "supabase",
+        }),
+        { contentComplianceEventStore: new RecordingSupabaseContentComplianceEventStore() },
+      ),
+    ).toThrow("invalid_runtime_env:PROOF_PAGE_REPOSITORY_TRANSACTION_STORE");
   });
 
   it("fails startup when Supabase compliance event storage is selected without a store", () => {
@@ -583,6 +603,24 @@ async function getProofPageComplianceEvents(app: ReturnType<typeof createApp>): 
 
 class RecordingSupabaseProofPageStore implements SupabaseProofPageStore {
   readonly rows: SupabaseProofPageEntryRow[] = [];
+  readonly visibilityUpdates: Array<{
+    backup_run_id: string;
+    visibility: SupabaseProofPageRow["visibility"];
+    revoked_at: string | null;
+    updated_at: string;
+  }> = [];
+  readonly revocationTransactions: Array<{
+    proof_page: {
+      backup_run_id: string;
+      visibility: SupabaseProofPageRow["visibility"];
+      revoked_at: string | null;
+      updated_at: string;
+    };
+    content_compliance_event: Omit<SupabaseContentComplianceEventRow, "id" | "created_at"> & {
+      id?: string;
+      created_at?: string;
+    };
+  }> = [];
 
   async insertProofPage(row: {
     backup_run: SupabaseBackupRunRow;
@@ -623,6 +661,38 @@ class RecordingSupabaseProofPageStore implements SupabaseProofPageStore {
     revoked_at: string | null;
     updated_at: string;
   }): Promise<SupabaseProofPageEntryRow | null> {
+    this.visibilityUpdates.push({ ...input });
+    return this.applyProofPageVisibility(input);
+  }
+
+  async updateProofPageVisibilityAndRecordContentComplianceEvent(input: {
+    proof_page: {
+      backup_run_id: string;
+      visibility: SupabaseProofPageRow["visibility"];
+      revoked_at: string | null;
+      updated_at: string;
+    };
+    content_compliance_event: Omit<SupabaseContentComplianceEventRow, "id" | "created_at"> & {
+      id?: string;
+      created_at?: string;
+    };
+  }): Promise<SupabaseProofPageEntryRow | null> {
+    this.revocationTransactions.push({
+      proof_page: { ...input.proof_page },
+      content_compliance_event: {
+        ...input.content_compliance_event,
+        details: { ...input.content_compliance_event.details },
+      },
+    });
+    return this.applyProofPageVisibility(input.proof_page);
+  }
+
+  private applyProofPageVisibility(input: {
+    backup_run_id: string;
+    visibility: SupabaseProofPageRow["visibility"];
+    revoked_at: string | null;
+    updated_at: string;
+  }): SupabaseProofPageEntryRow | null {
     const row = this.rows.find((entry) => entry.proof_page.backup_run_id === input.backup_run_id);
 
     if (!row) {

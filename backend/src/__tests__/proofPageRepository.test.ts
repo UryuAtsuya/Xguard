@@ -77,10 +77,110 @@ describe("Proof page repository", () => {
       backupRun: { id: "backup-run-1" },
     });
   });
+
+  it("keeps proof page revoke visibility and compliance event persistence in one store transaction", async () => {
+    const store = new InMemorySupabaseProofPageStore();
+    const repository = new SupabaseProofPageRepository(store);
+
+    await repository.create({
+      userId: "user-1",
+      visibility: "public",
+      revokedAt: null,
+      backupRun: buildBackupRun(),
+      proofPayload: buildProofPayload(),
+    });
+
+    await repository.updateVisibilityAndRecordComplianceEvent(
+      "backup-run-1",
+      "revoked",
+      "2026-06-26T04:30:00.000Z",
+      {
+        eventType: "proof_page_revoked",
+        source: "user_request",
+        xAccountId: "x-account-1",
+        details: {
+          runId: "backup-run-1",
+          userId: "user-1",
+          previousVisibility: "public",
+          newVisibility: "revoked",
+        },
+        createdAt: "2026-06-26T04:30:00.000Z",
+      },
+    );
+
+    expect(store.rows[0]?.proof_page).toMatchObject({
+      backup_run_id: "backup-run-1",
+      visibility: "revoked",
+      revoked_at: "2026-06-26T04:30:00.000Z",
+    });
+    expect(store.contentComplianceEventRows).toEqual([
+      expect.objectContaining({
+        x_account_id: "x-account-1",
+        event_type: "proof_page_revoked",
+        source: "user_request",
+        created_at: "2026-06-26T04:30:00.000Z",
+      }),
+    ]);
+    expect(store.transactionCalls).toHaveLength(1);
+  });
+
+  it("rolls back proof page visibility when revoke compliance event persistence fails", async () => {
+    const store = new InMemorySupabaseProofPageStore();
+    const repository = new SupabaseProofPageRepository(store);
+
+    await repository.create({
+      userId: "user-1",
+      visibility: "public",
+      revokedAt: null,
+      backupRun: buildBackupRun(),
+      proofPayload: buildProofPayload(),
+    });
+
+    store.failNextContentComplianceEventInsert = true;
+
+    await expect(
+      repository.updateVisibilityAndRecordComplianceEvent(
+        "backup-run-1",
+        "revoked",
+        "2026-06-26T04:30:00.000Z",
+        {
+          eventType: "proof_page_revoked",
+          source: "user_request",
+          xAccountId: "x-account-1",
+          details: {
+            runId: "backup-run-1",
+            userId: "user-1",
+            previousVisibility: "public",
+            newVisibility: "revoked",
+          },
+          createdAt: "2026-06-26T04:30:00.000Z",
+        },
+      ),
+    ).rejects.toThrow("insert_content_compliance_event_failed");
+
+    expect(store.rows[0]?.proof_page).toMatchObject({
+      visibility: "public",
+      revoked_at: undefined,
+    });
+    expect(store.contentComplianceEventRows).toHaveLength(0);
+  });
 });
 
 class InMemorySupabaseProofPageStore implements SupabaseProofPageStore {
   readonly rows: SupabaseProofPageEntryRow[] = [];
+  readonly contentComplianceEventRows: Array<{
+    id: string;
+    x_account_id: string;
+    tweet_snapshot_id?: string;
+    proof_page_id?: string;
+    event_type: "proof_page_revoked";
+    source: "x_api" | "user_request" | "admin_review";
+    details: Record<string, unknown>;
+    resolved_at?: string;
+    created_at: string;
+  }> = [];
+  readonly transactionCalls: string[] = [];
+  failNextContentComplianceEventInsert = false;
 
   async insertProofPage(
     row: {
@@ -133,6 +233,55 @@ class InMemorySupabaseProofPageStore implements SupabaseProofPageStore {
     entry.proof_page.revoked_at = input.revoked_at ?? undefined;
     entry.proof_page.updated_at = input.updated_at;
     return cloneEntryRow(entry);
+  }
+
+  async updateProofPageVisibilityAndRecordContentComplianceEvent(input: {
+    proof_page: {
+      backup_run_id: string;
+      visibility: SupabaseProofPageRow["visibility"];
+      revoked_at: string | null;
+      updated_at: string;
+    };
+    content_compliance_event: {
+      id?: string;
+      x_account_id: string;
+      tweet_snapshot_id?: string;
+      proof_page_id?: string;
+      event_type: "proof_page_revoked";
+      source: "x_api" | "user_request" | "admin_review";
+      details: Record<string, unknown>;
+      resolved_at?: string;
+      created_at?: string;
+    };
+  }): Promise<SupabaseProofPageEntryRow | null> {
+    this.transactionCalls.push("updateProofPageVisibilityAndRecordContentComplianceEvent");
+    const rowsBefore = this.rows.map(cloneEntryRow);
+    const eventsBefore = this.contentComplianceEventRows.map((row) => ({ ...row, details: { ...row.details } }));
+
+    try {
+      const entry = await this.updateProofPageVisibility(input.proof_page);
+
+      if (!entry) {
+        return null;
+      }
+
+      if (this.failNextContentComplianceEventInsert) {
+        this.failNextContentComplianceEventInsert = false;
+        throw new Error("insert_content_compliance_event_failed");
+      }
+
+      this.contentComplianceEventRows.push({
+        ...input.content_compliance_event,
+        id: input.content_compliance_event.id ?? randomUUID(),
+        created_at: input.content_compliance_event.created_at ?? "2026-06-26T04:00:00.000Z",
+        details: { ...input.content_compliance_event.details },
+      });
+      return entry;
+    } catch (error) {
+      this.rows.splice(0, this.rows.length, ...rowsBefore);
+      this.contentComplianceEventRows.splice(0, this.contentComplianceEventRows.length, ...eventsBefore);
+      throw error;
+    }
   }
 }
 
