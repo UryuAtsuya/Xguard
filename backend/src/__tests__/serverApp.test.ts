@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRuntimeConfig } from "../config/runtimeConfig.js";
+import { SupabaseContentComplianceEventHttpStore } from "../repositories/supabaseContentComplianceEventHttpStore.js";
+import { SupabaseProofPageHttpStore } from "../repositories/supabaseProofPageHttpStore.js";
 import { createServerAppOptions } from "../serverApp.js";
 
 describe("server app composition", () => {
@@ -20,8 +22,8 @@ describe("server app composition", () => {
       },
     );
 
-    expect(options.contentComplianceEventStore).toBeDefined();
-    expect(options.proofPageStore).toBeDefined();
+    expect(options.contentComplianceEventStore).toBeInstanceOf(SupabaseContentComplianceEventHttpStore);
+    expect(options.proofPageStore).toBeInstanceOf(SupabaseProofPageHttpStore);
   });
 
   it("fails startup when Supabase mode lacks service-role env", () => {
