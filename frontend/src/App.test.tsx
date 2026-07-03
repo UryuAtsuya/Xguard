@@ -24,6 +24,7 @@ describe("App", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    window.history.pushState({}, "", "/");
 
     mockedFetchHealth.mockResolvedValue({
       ok: true,
@@ -149,9 +150,9 @@ describe("App", () => {
     async () => {
       render(<App />);
 
-      expect(screen.getByRole("heading", { name: "Xの信用資産を、静かに守る。" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "管理側" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "守りたいXアカウントを、安全に保全する。" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /@ユーザー名を入力して接続/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "管理画面" })).toHaveAttribute("href", "/admin");
       expect(screen.queryByRole("region", { name: "管理側の画面" })).not.toBeInTheDocument();
 
       await waitFor(() => {
@@ -164,12 +165,12 @@ describe("App", () => {
   it("runs the mock backup and shows proof preview data", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Xを安全に接続/ }));
+    fireEvent.click(screen.getByRole("button", { name: /@ユーザー名を入力して接続/ }));
     await waitFor(() => {
       expect(mockedCompleteOAuthCallback).toHaveBeenCalledWith("mock-authorization-code", "mock-state");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /バックアップを実行/ }));
+    fireEvent.click(screen.getByRole("button", { name: /復旧用データを保全/ }));
 
     await waitFor(() => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "session-token-1");
@@ -179,10 +180,10 @@ describe("App", () => {
   });
 
   it("shows database snapshot tables in the admin console", async () => {
+    window.history.pushState({}, "", "/admin");
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Xを安全に接続/ }));
-    fireEvent.click(screen.getByRole("button", { name: "管理側" }));
+    fireEvent.click(screen.getByRole("button", { name: "接続" }));
 
     await waitFor(() => {
       expect(mockedFetchAdminDatabaseSnapshot).toHaveBeenCalledWith("session-token-1");

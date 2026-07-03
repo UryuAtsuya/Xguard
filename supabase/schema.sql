@@ -276,6 +276,122 @@ create policy "Users can read own manual notification queue" on public.manual_no
 revoke all on table public.x_oauth_connections from public, anon, authenticated;
 grant all on table public.x_oauth_connections to service_role;
 
+create or replace function public.update_proof_page_visibility_and_record_content_compliance_event(
+  p_backup_run_id uuid,
+  p_visibility public.proof_page_visibility,
+  p_revoked_at timestamptz,
+  p_updated_at timestamptz,
+  p_event_id uuid,
+  p_x_account_id uuid,
+  p_tweet_snapshot_id uuid,
+  p_proof_page_id uuid,
+  p_event_type public.content_compliance_event_type,
+  p_source text,
+  p_details jsonb,
+  p_resolved_at timestamptz,
+  p_created_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  locked_proof_page public.proof_pages%rowtype;
+  updated_proof_page public.proof_pages%rowtype;
+  selected_backup_run public.backup_runs%rowtype;
+begin
+  select *
+    into locked_proof_page
+    from public.proof_pages
+    where proof_pages.backup_run_id = p_backup_run_id
+    for update;
+
+  if not found then
+    return null;
+  end if;
+
+  if p_proof_page_id is not null and p_proof_page_id <> locked_proof_page.id then
+    raise exception 'proof_page_revocation_event_mismatch:%', p_backup_run_id using errcode = 'P0001';
+  end if;
+
+  if p_x_account_id <> locked_proof_page.x_account_id then
+    raise exception 'proof_page_revocation_event_mismatch:%', p_backup_run_id using errcode = 'P0001';
+  end if;
+
+  update public.proof_pages
+    set visibility = p_visibility,
+        revoked_at = p_revoked_at,
+        updated_at = p_updated_at
+    where proof_pages.id = locked_proof_page.id
+    returning * into updated_proof_page;
+
+  insert into public.content_compliance_events (
+    id,
+    x_account_id,
+    tweet_snapshot_id,
+    proof_page_id,
+    event_type,
+    source,
+    details,
+    resolved_at,
+    created_at
+  ) values (
+    coalesce(p_event_id, gen_random_uuid()),
+    p_x_account_id,
+    p_tweet_snapshot_id,
+    updated_proof_page.id,
+    p_event_type,
+    coalesce(p_source, 'x_api'),
+    coalesce(p_details, '{}'::jsonb),
+    p_resolved_at,
+    coalesce(p_created_at, now())
+  );
+
+  select *
+    into selected_backup_run
+    from public.backup_runs
+    where backup_runs.id = updated_proof_page.backup_run_id;
+
+  return jsonb_build_object(
+    'backup_run', to_jsonb(selected_backup_run),
+    'proof_page', to_jsonb(updated_proof_page)
+  );
+end;
+$$;
+
+revoke all on function public.update_proof_page_visibility_and_record_content_compliance_event(
+  uuid,
+  public.proof_page_visibility,
+  timestamptz,
+  timestamptz,
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  public.content_compliance_event_type,
+  text,
+  jsonb,
+  timestamptz,
+  timestamptz
+) from public, anon, authenticated;
+
+grant execute on function public.update_proof_page_visibility_and_record_content_compliance_event(
+  uuid,
+  public.proof_page_visibility,
+  timestamptz,
+  timestamptz,
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  public.content_compliance_event_type,
+  text,
+  jsonb,
+  timestamptz,
+  timestamptz
+) to service_role;
+
 create or replace function public.record_api_usage_event_with_monthly_limit(
   p_id uuid,
   p_user_id uuid,

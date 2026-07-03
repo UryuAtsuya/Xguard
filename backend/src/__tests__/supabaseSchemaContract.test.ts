@@ -12,6 +12,10 @@ const xOauthConnectionsTableSql =
 const contentComplianceEventsTableSql =
   schemaSql.match(/create table public\.content_compliance_events \([\s\S]*?\n\);/)?.[0] ?? "";
 const proofPagesTableSql = schemaSql.match(/create table public\.proof_pages \([\s\S]*?\n\);/)?.[0] ?? "";
+const proofPageRevocationFunctionSql =
+  schemaSql.match(
+    /create or replace function public\.update_proof_page_visibility_and_record_content_compliance_event\([\s\S]*?\n\$\$;/,
+  )?.[0] ?? "";
 const ownComplianceEventsPolicySql =
   schemaSql.match(
     /create policy "Users can read own compliance events" on public\.content_compliance_events for select using \([\s\S]*?\n\);/,
@@ -111,6 +115,20 @@ describe("Supabase schema contract", () => {
     expect(schemaSql).toContain("alter table public.proof_pages enable row level security;");
     expect(schemaSql).toContain(
       'create policy "Users can read own proof pages" on public.proof_pages for select using (auth.uid() = user_id);',
+    );
+  });
+
+  it("defines proof page revocation as one service-role transaction function", () => {
+    expect(proofPageRevocationFunctionSql).toContain("returns jsonb");
+    expect(proofPageRevocationFunctionSql).toContain("for update");
+    expect(proofPageRevocationFunctionSql).toContain("update public.proof_pages");
+    expect(proofPageRevocationFunctionSql).toContain("insert into public.content_compliance_events");
+    expect(proofPageRevocationFunctionSql).toContain("proof_page_revocation_event_mismatch");
+    expect(schemaSql).toContain(
+      "revoke all on function public.update_proof_page_visibility_and_record_content_compliance_event(",
+    );
+    expect(schemaSql).toContain(
+      "grant execute on function public.update_proof_page_visibility_and_record_content_compliance_event(",
     );
   });
 });

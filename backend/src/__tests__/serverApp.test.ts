@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import { SupabaseContentComplianceEventHttpStore } from "../repositories/supabaseContentComplianceEventHttpStore.js";
+import { SupabaseProofPageHttpStore } from "../repositories/supabaseProofPageHttpStore.js";
 import { createServerAppOptions } from "../serverApp.js";
 
 describe("server app composition", () => {
@@ -10,7 +11,7 @@ describe("server app composition", () => {
     expect(options).toEqual({});
   });
 
-  it("wires Supabase content compliance event storage when explicitly selected", () => {
+  it("wires Supabase proof page and compliance stores from service-role env", () => {
     const options = createServerAppOptions(
       createRuntimeConfig({
         CONTENT_COMPLIANCE_EVENT_REPOSITORY: "supabase",
@@ -22,16 +23,19 @@ describe("server app composition", () => {
     );
 
     expect(options.contentComplianceEventStore).toBeInstanceOf(SupabaseContentComplianceEventHttpStore);
+    expect(options.proofPageStore).toBeInstanceOf(SupabaseProofPageHttpStore);
   });
 
-  it("fails startup when Supabase mode is selected without Supabase runtime env", () => {
+  it("fails startup when Supabase mode lacks service-role env", () => {
     expect(() =>
       createServerAppOptions(
         createRuntimeConfig({
           CONTENT_COMPLIANCE_EVENT_REPOSITORY: "supabase",
         }),
-        {},
+        {
+          SUPABASE_URL: "https://xguard.supabase.co",
+        },
       ),
-    ).toThrow("invalid_runtime_env:SUPABASE_URL");
+    ).toThrow("invalid_runtime_env:SUPABASE_SERVICE_ROLE_KEY");
   });
 });

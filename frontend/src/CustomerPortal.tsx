@@ -20,21 +20,21 @@ export function CustomerPortal({
   readiness,
 }: CustomerPortalProps) {
   return (
-    <section className="customer-portal" aria-label="相手側に見せる画面">
+    <section className="customer-portal" aria-label="お客様が見る画面">
       <div className="customer-hero">
-        <p className="eyebrow">Proof page experience</p>
+        <p className="eyebrow">Customer portal</p>
         <h1>
-          Xの信用資産を、<span className="no-break">静かに守る。</span>
+          守りたいXアカウントを、<span className="no-break">安全に保全する。</span>
         </h1>
-        <p className="hero-text">相手に見せるのは、保全済みデータから作った赤入れ済みの証明情報だけです。</p>
+        <p className="hero-text">お客様画面はユーザー名入力、保全状況の確認、復旧用データの準備に絞ります。管理用DBや内部レビュー情報は表示しません。</p>
         <div className="hero-actions">
           <button className="primary-action" type="button" onClick={onConnect} disabled={isBusy}>
             <KeyRound aria-hidden="true" size={18} />
-            Xを安全に接続
+            @ユーザー名を入力して接続
           </button>
           <button className="secondary-action" type="button" onClick={onBackup} disabled={isBusy}>
             <DatabaseBackup aria-hidden="true" size={18} />
-            バックアップを実行
+            復旧用データを保全
           </button>
         </div>
       </div>
@@ -51,15 +51,15 @@ export function CustomerPortal({
         <p>{notice}</p>
       </aside>
 
-      <section className="customer-workflow" aria-label="相手側の公開前フロー">
-        <ProcessCard title="Connect" value={oauth ? `${oauth.scopes.length} scopes` : "3 scopes"}>
+      <section className="customer-workflow" aria-label="お客様の基本動作">
+        <ProcessCard title="入力" value={oauth ? `${oauth.scopes.length} scopes` : "@username"}>
           <ScopeList scopes={oauth?.scopes ?? ["tweet.read", "users.read", "offline.access"]} />
         </ProcessCard>
-        <ProcessCard title="Backup" value={backupRun ? `${backupRun.tweetsCaptured} posts` : "waiting"}>
+        <ProcessCard title="状況確認" value={backupRun ? `${backupRun.tweetsCaptured} posts` : "waiting"}>
           <InfoRow label="API" value={health?.ok ? "online" : "checking"} />
           <InfoRow label="Rate limit" value={`${backupRun?.rateLimitRemaining ?? 1499} left`} />
         </ProcessCard>
-        <ProcessCard title="Proof" value={proof ? `@${proof.username}` : "private"}>
+        <ProcessCard title="復旧" value={proof ? `@${proof.username}` : "private"}>
           {proof ? <ProofPreview proof={proof} /> : <EmptyProof />}
           <button className="secondary-action full-width" type="button" disabled={!proof}>
             <EyeOff aria-hidden="true" size={18} />

@@ -23,11 +23,12 @@ export function AdminConsole({
       <aside className="admin-sidebar">
         <div>
           <p className="eyebrow">Admin Console</p>
-          <h1>運用管理</h1>
+          <h1>管理画面</h1>
         </div>
         <nav aria-label="管理メニュー">
           <a href="#overview">Overview</a>
           <a href="#database">Database</a>
+          <a href="#content">Content</a>
           <a href="#review">Review</a>
         </nav>
       </aside>
@@ -36,7 +37,7 @@ export function AdminConsole({
         <header className="admin-toolbar">
           <div>
             <p className="eyebrow">Internal workspace</p>
-            <h2>保全状況とDB snapshot</h2>
+            <h2>顧客DBと復旧データの確認</h2>
           </div>
           <div className="toolbar-actions">
             <button className="icon-button" type="button" aria-label="検索">
@@ -73,6 +74,17 @@ export function AdminConsole({
         </section>
 
         <DatabaseSection snapshot={snapshot.data} status={snapshot.status} />
+
+        <section className="admin-review" id="content" aria-label="保全コンテンツの確認項目">
+          <div className="panel-header">
+            <span>Stored content requirements</span>
+            <ShieldCheck aria-hidden="true" size={18} />
+          </div>
+          <ReviewRow title="Customer account" value="x_user_id / @username / display name" />
+          <ReviewRow title="Post text" value="tweet id / body / created at" />
+          <ReviewRow title="Media" value="image / video metadata, no public raw payload" />
+          <ReviewRow title="Recovery status" value="case status / proof page / revocation" />
+        </section>
 
         <section className="admin-review" id="review" aria-label="レビューキュー">
           <div className="panel-header">
