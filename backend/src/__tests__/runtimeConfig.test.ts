@@ -6,6 +6,7 @@ const productionEnv = {
   APP_BASE_URL: "https://xguard.example.com",
   X_CLIENT_ID: "real-client-id",
   X_CLIENT_SECRET: "super-secret-value",
+  OAUTH_STATE_REPOSITORY: "memory",
   CONTENT_COMPLIANCE_EVENT_REPOSITORY: "memory",
 };
 
@@ -59,6 +60,18 @@ describe("runtime confirmation gates", () => {
     ).toThrow("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY");
   });
 
+  it("rejects production when OAuth state storage is not explicit", () => {
+    const { OAUTH_STATE_REPOSITORY: _repositoryMode, ...productionEnvWithoutRepository } = productionEnv;
+
+    expect(() =>
+      createRuntimeConfig({
+        ...productionEnvWithoutRepository,
+        PRICING_CONFIRMED: "true",
+        COMPLIANCE_CONFIRMED: "true",
+      }),
+    ).toThrow("invalid_runtime_env:OAUTH_STATE_REPOSITORY");
+  });
+
   it("skips confirmation gates in staging", () => {
     const config = createRuntimeConfig({
       NODE_ENV: "staging",
@@ -84,6 +97,23 @@ describe("runtime confirmation gates", () => {
         CONTENT_COMPLIANCE_EVENT_REPOSITORY: " supabase ",
       }).contentComplianceEventRepository,
     ).toBe("supabase");
+  });
+
+  it("uses in-memory OAuth state storage unless Supabase is explicitly selected", () => {
+    expect(createRuntimeConfig({}).oauthStateRepository).toBe("memory");
+    expect(
+      createRuntimeConfig({
+        OAUTH_STATE_REPOSITORY: " supabase ",
+      }).oauthStateRepository,
+    ).toBe("supabase");
+  });
+
+  it("rejects unsupported OAuth state repository modes", () => {
+    expect(() =>
+      createRuntimeConfig({
+        OAUTH_STATE_REPOSITORY: "postgres",
+      }),
+    ).toThrow("invalid_runtime_env:OAUTH_STATE_REPOSITORY");
   });
 
   it("rejects unsupported content compliance event repository modes", () => {

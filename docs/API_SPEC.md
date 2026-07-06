@@ -31,7 +31,7 @@
 
 `GET /api/x/oauth/callback` は `code` と `state` を必須にする。保存済み `state` が存在しない、別の値、または replay の場合は `403 { "error": "invalid_oauth_state" }` を返す。TTL 超過後の callback は `403 { "error": "expired_oauth_state" }` を返す。正常時は `state` を一回で消費し、保存していた `code_verifier` を token exchange boundary へ渡してから token repository boundary へ進む。現prototypeでは外部X token endpointをまだ呼ばず、非productionのprototype検証でのみrepository refを生成する。`NODE_ENV=production` かつ configured mode の callback では prototype token refs / session を発行せず、`501 { "error": "x_oauth_token_exchange_not_implemented" }` を返す。API response には token material と `code_verifier` を返さない。TTL は `OAUTH_STATE_TTL_SECONDS` で変更でき、既定値は300秒である。PKCE verifier byte length は `OAUTH_PKCE_VERIFIER_BYTES` で変更でき、既定値は64 bytes、許可範囲は32から96 bytesである。
 
-現在の `OAuthStateRepository` は in-memory prototype で、`save` 時に期限切れrecordを掃除する。本番deployでは callback が別process / 別instanceへ届く可能性があるため、同じ一回限り消費・TTL・replay拒否契約を持つ共有永続storeへ置き換える。
+`OAuthStateRepository` は開発既定では in-memory だが、`OAUTH_STATE_REPOSITORY=supabase` で `oauth_states` の service-role store を使う。Supabase store は `state`、`code_verifier`、`expires_at` を保存し、callback 時に対象行を削除して返すことで一回限り消費と replay 拒否を同じ境界へ寄せる。`code_verifier` は service-role 境界の内側に留め、API response や frontend へ返さない。`NODE_ENV=production` では `OAUTH_STATE_REPOSITORY` の明示設定を必須にする。
 
 ## 置き換え予定の Backend Interfaces
 

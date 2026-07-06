@@ -5,7 +5,7 @@ import { z } from "zod";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
-import { InMemoryOAuthStateRepository } from "./repositories/oauthStateRepository.js";
+import { InMemoryOAuthStateRepository, type OAuthStateRepository } from "./repositories/oauthStateRepository.js";
 import { InMemorySessionRepository } from "./repositories/sessionRepository.js";
 import { InMemoryTokenRepository, V0_READ_ONLY_X_SCOPES } from "./repositories/tokenRepository.js";
 import {
@@ -105,6 +105,7 @@ export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
 export interface CreateAppOptions {
   xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
+  oauthStateRepository?: OAuthStateRepository;
   proofPageStore?: SupabaseProofPageStore;
   contentComplianceEventStore?: SupabaseContentComplianceEventStore;
 }
@@ -126,7 +127,7 @@ export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()):
 export function createApp(config: RuntimeConfig = createRuntimeConfig(), options: CreateAppOptions = {}) {
   const app = express();
   const tokenRepository = new InMemoryTokenRepository();
-  const oauthStateRepository = new InMemoryOAuthStateRepository();
+  const oauthStateRepository = createOAuthStateRepository(config, options);
   const sessionRepository = new InMemorySessionRepository();
   const xOAuthTokenExchangeService =
     options.xOAuthTokenExchangeService ?? createDefaultXOAuthTokenExchangeService(config);
@@ -352,6 +353,18 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   });
 
   return app;
+}
+
+function createOAuthStateRepository(config: RuntimeConfig, options: CreateAppOptions): OAuthStateRepository {
+  if (options.oauthStateRepository) {
+    return options.oauthStateRepository;
+  }
+
+  if (config.oauthStateRepository === "supabase") {
+    throw new Error("invalid_runtime_env:OAUTH_STATE_REPOSITORY_STORE");
+  }
+
+  return new InMemoryOAuthStateRepository();
 }
 
 function createContentComplianceEventRepository(

@@ -10,10 +10,12 @@ export interface RuntimeConfig {
   oauthPkceVerifierBytes: number;
   oauthStatusExposure: OAuthStatusExposure;
   oauthStatusDiagnosticToken?: string;
+  oauthStateRepository: OAuthStateRepositoryMode;
   contentComplianceEventRepository: ContentComplianceEventRepositoryMode;
 }
 
 export type OAuthStatusExposure = "disabled" | "deployment_diagnostic";
+export type OAuthStateRepositoryMode = "memory" | "supabase";
 export type ContentComplianceEventRepositoryMode = "memory" | "supabase";
 
 export type XOAuthRuntimeConfig =
@@ -55,9 +57,14 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const oauthPkceVerifierBytes = parseBoundedInteger(env.OAUTH_PKCE_VERIFIER_BYTES, 64, 32, 96, "OAUTH_PKCE_VERIFIER_BYTES");
   const oauthStatusExposure = parseOAuthStatusExposure(env.X_OAUTH_STATUS_EXPOSURE);
   const oauthStatusDiagnosticToken = env.X_OAUTH_STATUS_DIAGNOSTIC_TOKEN?.trim() || undefined;
+  const oauthStateRepository = parseOAuthStateRepository(env.OAUTH_STATE_REPOSITORY);
   const contentComplianceEventRepository = parseContentComplianceEventRepository(
     env.CONTENT_COMPLIANCE_EVENT_REPOSITORY,
   );
+
+  if (nodeEnv === "production" && !env.OAUTH_STATE_REPOSITORY?.trim()) {
+    throw new Error("invalid_runtime_env:OAUTH_STATE_REPOSITORY");
+  }
 
   if (nodeEnv === "production" && !env.CONTENT_COMPLIANCE_EVENT_REPOSITORY?.trim()) {
     throw new Error("invalid_runtime_env:CONTENT_COMPLIANCE_EVENT_REPOSITORY");
@@ -94,6 +101,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       oauthPkceVerifierBytes,
       oauthStatusExposure,
       oauthStatusDiagnosticToken,
+      oauthStateRepository,
       contentComplianceEventRepository,
       xOAuth: {
         mode: "mock",
@@ -116,6 +124,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     oauthPkceVerifierBytes,
     oauthStatusExposure,
     oauthStatusDiagnosticToken,
+    oauthStateRepository,
     contentComplianceEventRepository,
     xOAuth: {
       mode: "configured",
@@ -124,6 +133,20 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       clientSecretConfigured: Boolean(clientSecret),
     },
   };
+}
+
+function parseOAuthStateRepository(value: string | undefined): OAuthStateRepositoryMode {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "memory";
+  }
+
+  if (trimmed === "memory" || trimmed === "supabase") {
+    return trimmed;
+  }
+
+  throw new Error("invalid_runtime_env:OAUTH_STATE_REPOSITORY");
 }
 
 function parseContentComplianceEventRepository(value: string | undefined): ContentComplianceEventRepositoryMode {

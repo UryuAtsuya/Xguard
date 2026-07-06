@@ -59,6 +59,13 @@ create table public.x_oauth_connections (
   unique (x_account_id, provider)
 );
 
+create table public.oauth_states (
+  state text primary key,
+  code_verifier text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
 create table public.backup_runs (
   id uuid primary key default gen_random_uuid(),
   x_account_id uuid not null references public.x_accounts(id) on delete cascade,
@@ -212,6 +219,7 @@ create table public.stripe_events (
 
 create index x_accounts_user_id_idx on public.x_accounts(user_id);
 create index x_oauth_connections_x_account_id_idx on public.x_oauth_connections(x_account_id);
+create index oauth_states_expires_at_idx on public.oauth_states(expires_at);
 create index backup_runs_x_account_id_created_at_idx on public.backup_runs(x_account_id, created_at desc);
 create index api_usage_events_user_id_occurred_at_idx on public.api_usage_events(user_id, occurred_at desc);
 create index tweet_snapshots_x_account_id_captured_at_idx on public.tweet_snapshots(x_account_id, captured_at desc);
@@ -224,6 +232,7 @@ create index recovery_sessions_user_id_created_at_idx on public.recovery_session
 alter table public.user_profiles enable row level security;
 alter table public.x_accounts enable row level security;
 alter table public.x_oauth_connections enable row level security;
+alter table public.oauth_states enable row level security;
 alter table public.backup_runs enable row level security;
 alter table public.api_usage_events enable row level security;
 alter table public.tweet_snapshots enable row level security;
@@ -270,11 +279,13 @@ create policy "Users can read own manual notification queue" on public.manual_no
   )
 );
 
--- x_oauth_connections and stripe_events are service-role only.
+-- x_oauth_connections, oauth_states, and stripe_events are service-role only.
 -- Insert/update/delete are service-role only for v0.
 -- Do not expose token refs, raw X payload, service role keys, or Stripe raw payloads to the frontend.
 revoke all on table public.x_oauth_connections from public, anon, authenticated;
 grant all on table public.x_oauth_connections to service_role;
+revoke all on table public.oauth_states from public, anon, authenticated;
+grant all on table public.oauth_states to service_role;
 
 create or replace function public.update_proof_page_visibility_and_record_content_compliance_event(
   p_backup_run_id uuid,
