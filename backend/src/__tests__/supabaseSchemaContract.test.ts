@@ -20,6 +20,13 @@ const proofPageRevocationFunctionSql =
   schemaSql.match(
     /create or replace function public\.update_proof_page_visibility_and_record_content_compliance_event\([\s\S]*?\n\$\$;/,
   )?.[0] ?? "";
+const mediaOwnerConsistencyFunctionSql =
+  schemaSql.match(/create or replace function public\.validate_media_owner_consistency\(\)[\s\S]*?\n\$\$;/)?.[0] ??
+  "";
+const recoveryCaseOwnerConsistencyFunctionSql =
+  schemaSql.match(
+    /create or replace function public\.validate_recovery_case_owner_consistency\(\)[\s\S]*?\n\$\$;/,
+  )?.[0] ?? "";
 const ownComplianceEventsPolicySql =
   schemaSql.match(
     /create policy "Users can read own compliance events" on public\.content_compliance_events for select using \([\s\S]*?\n\);/,
@@ -150,6 +157,14 @@ describe("Supabase schema contract", () => {
     expect(ownMediaPolicySql).toContain(
       "exists (select 1 from public.x_accounts where x_accounts.id = media.x_account_id and x_accounts.user_id = auth.uid())",
     );
+
+    expect(mediaOwnerConsistencyFunctionSql).toContain("media_backup_run_owner_mismatch");
+    expect(mediaOwnerConsistencyFunctionSql).toContain("backup_runs.x_account_id = new.x_account_id");
+    expect(mediaOwnerConsistencyFunctionSql).toContain("media_tweet_snapshot_owner_mismatch");
+    expect(mediaOwnerConsistencyFunctionSql).toContain("tweet_snapshots.x_account_id = new.x_account_id");
+    expect(schemaSql).toContain("create trigger validate_media_owner_consistency_before_write");
+    expect(schemaSql).toContain("before insert or update of x_account_id, backup_run_id, tweet_snapshot_id");
+    expect(schemaSql).toContain("on public.media");
   });
 
   it("defines recovery cases as user-owned recovery workflow state", () => {
@@ -181,6 +196,15 @@ describe("Supabase schema contract", () => {
     expect(schemaSql).toContain(
       'create policy "Users can read own recovery cases" on public.recovery_cases for select using (auth.uid() = user_id);',
     );
+
+    expect(recoveryCaseOwnerConsistencyFunctionSql).toContain("recovery_case_x_account_owner_mismatch");
+    expect(recoveryCaseOwnerConsistencyFunctionSql).toContain("x_accounts.user_id = new.user_id");
+    expect(recoveryCaseOwnerConsistencyFunctionSql).toContain("recovery_case_proof_page_owner_mismatch");
+    expect(recoveryCaseOwnerConsistencyFunctionSql).toContain("proof_pages.user_id = new.user_id");
+    expect(recoveryCaseOwnerConsistencyFunctionSql).toContain("proof_pages.x_account_id = new.x_account_id");
+    expect(schemaSql).toContain("create trigger validate_recovery_case_owner_consistency_before_write");
+    expect(schemaSql).toContain("before insert or update of user_id, x_account_id, proof_page_id");
+    expect(schemaSql).toContain("on public.recovery_cases");
   });
 
   it("defines proof pages as one persistent repository row per backup run", () => {
