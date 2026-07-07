@@ -9,6 +9,7 @@ const usageLedgerFunctionSql =
   )?.[0] ?? "";
 const xOauthConnectionsTableSql =
   schemaSql.match(/create table public\.x_oauth_connections \([\s\S]*?\n\);/)?.[0] ?? "";
+const oauthStatesTableSql = schemaSql.match(/create table public\.oauth_states \([\s\S]*?\n\);/)?.[0] ?? "";
 const contentComplianceEventsTableSql =
   schemaSql.match(/create table public\.content_compliance_events \([\s\S]*?\n\);/)?.[0] ?? "";
 const proofPagesTableSql = schemaSql.match(/create table public\.proof_pages \([\s\S]*?\n\);/)?.[0] ?? "";
@@ -69,6 +70,21 @@ describe("Supabase schema contract", () => {
     );
     expect(schemaSql).toContain("grant all on table public.x_oauth_connections to service_role;");
     expect(schemaSql).not.toMatch(/create policy [\s\S]* on public\.x_oauth_connections/);
+  });
+
+  it("defines OAuth state persistence with PKCE verifier and service-role-only exposure", () => {
+    expect(oauthStatesTableSql).toContain("state text primary key");
+    expect(oauthStatesTableSql).toContain("code_verifier text not null");
+    expect(oauthStatesTableSql).toContain("expires_at timestamptz not null");
+    expect(oauthStatesTableSql).toContain("created_at timestamptz not null default now()");
+
+    expect(schemaSql).toContain("create index oauth_states_expires_at_idx on public.oauth_states(expires_at);");
+    expect(schemaSql).toContain("alter table public.oauth_states enable row level security;");
+    expect(schemaSql).toContain(
+      "revoke all on table public.oauth_states from public, anon, authenticated;",
+    );
+    expect(schemaSql).toContain("grant all on table public.oauth_states to service_role;");
+    expect(schemaSql).not.toMatch(/create policy [\s\S]* on public\.oauth_states/);
   });
 
   it("defines content compliance events with ownership constraints and read policy", () => {
