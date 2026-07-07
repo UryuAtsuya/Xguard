@@ -9,6 +9,7 @@ create type public.backup_run_status as enum ('queued', 'running', 'completed', 
 create type public.proof_page_visibility as enum ('private', 'unlisted', 'public', 'revoked');
 create type public.content_compliance_event_type as enum ('tweet_deleted', 'tweet_protected', 'tweet_withheld', 'tweet_changed', 'user_deleted', 'user_suspended', 'user_request_delete', 'proof_page_revoked');
 create type public.recovery_session_status as enum ('draft', 'proof_ready', 'new_account_registered', 'completed');
+create type public.recovery_case_status as enum ('open', 'proof_ready', 'recovering', 'closed', 'canceled');
 create type public.health_check_reason as enum ('ok', 'not_found', 'forbidden', 'auth_failed', 'rate_limited', 'api_error', 'network_error', 'unknown');
 create type public.x_oauth_connection_status as enum ('active', 'auth_expired', 'revoked');
 
@@ -124,6 +125,22 @@ create table public.tweet_snapshots (
   unique (x_account_id, tweet_id, captured_at)
 );
 
+create table public.media (
+  id uuid primary key default gen_random_uuid(),
+  x_account_id uuid not null references public.x_accounts(id) on delete cascade,
+  backup_run_id uuid references public.backup_runs(id) on delete set null,
+  tweet_snapshot_id uuid references public.tweet_snapshots(id) on delete set null,
+  tweet_id text not null,
+  media_key text not null,
+  type text not null,
+  url_or_storage_key text not null,
+  width integer,
+  height integer,
+  duration_ms integer,
+  captured_at timestamptz not null default now(),
+  unique (x_account_id, media_key, captured_at)
+);
+
 create table public.profile_snapshots (
   id uuid primary key default gen_random_uuid(),
   x_account_id uuid not null references public.x_accounts(id) on delete cascade,
@@ -194,6 +211,19 @@ create table public.recovery_sessions (
   completed_at timestamptz
 );
 
+create table public.recovery_cases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.user_profiles(id) on delete cascade,
+  x_account_id uuid not null references public.x_accounts(id) on delete cascade,
+  proof_page_id uuid references public.proof_pages(id) on delete set null,
+  status public.recovery_case_status not null default 'open',
+  reason text,
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table public.manual_notification_queue (
   id uuid primary key default gen_random_uuid(),
   recovery_session_id uuid not null references public.recovery_sessions(id) on delete cascade,
@@ -223,11 +253,15 @@ create index oauth_states_expires_at_idx on public.oauth_states(expires_at);
 create index backup_runs_x_account_id_created_at_idx on public.backup_runs(x_account_id, created_at desc);
 create index api_usage_events_user_id_occurred_at_idx on public.api_usage_events(user_id, occurred_at desc);
 create index tweet_snapshots_x_account_id_captured_at_idx on public.tweet_snapshots(x_account_id, captured_at desc);
+create index media_x_account_id_captured_at_idx on public.media(x_account_id, captured_at desc);
+create index media_tweet_snapshot_id_idx on public.media(tweet_snapshot_id);
 create index profile_snapshots_x_account_id_captured_at_idx on public.profile_snapshots(x_account_id, captured_at desc);
 create index account_health_checks_x_account_id_checked_at_idx on public.account_health_checks(x_account_id, checked_at desc);
 create index proof_pages_user_id_created_at_idx on public.proof_pages(user_id, created_at desc);
 create index content_compliance_events_x_account_id_created_at_idx on public.content_compliance_events(x_account_id, created_at desc);
 create index recovery_sessions_user_id_created_at_idx on public.recovery_sessions(user_id, created_at desc);
+create index recovery_cases_user_id_opened_at_idx on public.recovery_cases(user_id, opened_at desc);
+create index recovery_cases_x_account_id_opened_at_idx on public.recovery_cases(x_account_id, opened_at desc);
 
 alter table public.user_profiles enable row level security;
 alter table public.x_accounts enable row level security;
@@ -236,11 +270,13 @@ alter table public.oauth_states enable row level security;
 alter table public.backup_runs enable row level security;
 alter table public.api_usage_events enable row level security;
 alter table public.tweet_snapshots enable row level security;
+alter table public.media enable row level security;
 alter table public.profile_snapshots enable row level security;
 alter table public.account_health_checks enable row level security;
 alter table public.proof_pages enable row level security;
 alter table public.content_compliance_events enable row level security;
 alter table public.recovery_sessions enable row level security;
+alter table public.recovery_cases enable row level security;
 alter table public.manual_notification_queue enable row level security;
 alter table public.stripe_events enable row level security;
 
@@ -258,6 +294,10 @@ create policy "Users can read own tweet snapshots" on public.tweet_snapshots for
   exists (select 1 from public.x_accounts where x_accounts.id = tweet_snapshots.x_account_id and x_accounts.user_id = auth.uid())
 );
 
+create policy "Users can read own media" on public.media for select using (
+  exists (select 1 from public.x_accounts where x_accounts.id = media.x_account_id and x_accounts.user_id = auth.uid())
+);
+
 create policy "Users can read own profile snapshots" on public.profile_snapshots for select using (
   exists (select 1 from public.x_accounts where x_accounts.id = profile_snapshots.x_account_id and x_accounts.user_id = auth.uid())
 );
@@ -269,6 +309,8 @@ create policy "Users can read own health checks" on public.account_health_checks
 create policy "Users can read own compliance events" on public.content_compliance_events for select using (
   exists (select 1 from public.x_accounts where x_accounts.id = content_compliance_events.x_account_id and x_accounts.user_id = auth.uid())
 );
+
+create policy "Users can read own recovery cases" on public.recovery_cases for select using (auth.uid() = user_id);
 
 create policy "Users can read own manual notification queue" on public.manual_notification_queue for select using (
   exists (
@@ -286,6 +328,77 @@ revoke all on table public.x_oauth_connections from public, anon, authenticated;
 grant all on table public.x_oauth_connections to service_role;
 revoke all on table public.oauth_states from public, anon, authenticated;
 grant all on table public.oauth_states to service_role;
+
+create or replace function public.validate_media_owner_consistency()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.backup_run_id is not null and not exists (
+    select 1
+    from public.backup_runs
+    where backup_runs.id = new.backup_run_id
+      and backup_runs.x_account_id = new.x_account_id
+  ) then
+    raise exception 'media_backup_run_owner_mismatch:%', new.backup_run_id using errcode = 'P0001';
+  end if;
+
+  if new.tweet_snapshot_id is not null and not exists (
+    select 1
+    from public.tweet_snapshots
+    where tweet_snapshots.id = new.tweet_snapshot_id
+      and tweet_snapshots.x_account_id = new.x_account_id
+  ) then
+    raise exception 'media_tweet_snapshot_owner_mismatch:%', new.tweet_snapshot_id using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger validate_media_owner_consistency_before_write
+  before insert or update of x_account_id, backup_run_id, tweet_snapshot_id
+  on public.media
+  for each row
+  execute function public.validate_media_owner_consistency();
+
+create or replace function public.validate_recovery_case_owner_consistency()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.x_accounts
+    where x_accounts.id = new.x_account_id
+      and x_accounts.user_id = new.user_id
+  ) then
+    raise exception 'recovery_case_x_account_owner_mismatch:%', new.x_account_id using errcode = 'P0001';
+  end if;
+
+  if new.proof_page_id is not null and not exists (
+    select 1
+    from public.proof_pages
+    where proof_pages.id = new.proof_page_id
+      and proof_pages.user_id = new.user_id
+      and proof_pages.x_account_id = new.x_account_id
+  ) then
+    raise exception 'recovery_case_proof_page_owner_mismatch:%', new.proof_page_id using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger validate_recovery_case_owner_consistency_before_write
+  before insert or update of user_id, x_account_id, proof_page_id
+  on public.recovery_cases
+  for each row
+  execute function public.validate_recovery_case_owner_consistency();
 
 create or replace function public.update_proof_page_visibility_and_record_content_compliance_event(
   p_backup_run_id uuid,
