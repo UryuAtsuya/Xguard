@@ -12,7 +12,10 @@ const xOauthConnectionsTableSql =
 const oauthStatesTableSql = schemaSql.match(/create table public\.oauth_states \([\s\S]*?\n\);/)?.[0] ?? "";
 const contentComplianceEventsTableSql =
   schemaSql.match(/create table public\.content_compliance_events \([\s\S]*?\n\);/)?.[0] ?? "";
+const mediaTableSql = schemaSql.match(/create table public\.media \([\s\S]*?\n\);/)?.[0] ?? "";
 const proofPagesTableSql = schemaSql.match(/create table public\.proof_pages \([\s\S]*?\n\);/)?.[0] ?? "";
+const recoveryCasesTableSql =
+  schemaSql.match(/create table public\.recovery_cases \([\s\S]*?\n\);/)?.[0] ?? "";
 const proofPageRevocationFunctionSql =
   schemaSql.match(
     /create or replace function public\.update_proof_page_visibility_and_record_content_compliance_event\([\s\S]*?\n\$\$;/,
@@ -21,6 +24,9 @@ const ownComplianceEventsPolicySql =
   schemaSql.match(
     /create policy "Users can read own compliance events" on public\.content_compliance_events for select using \([\s\S]*?\n\);/,
   )?.[0] ?? "";
+const ownMediaPolicySql =
+  schemaSql.match(/create policy "Users can read own media" on public\.media for select using \([\s\S]*?\n\);/)?.[0] ??
+  "";
 
 describe("Supabase schema contract", () => {
   it("requires x_account_id when usage is attached to a backup run", () => {
@@ -113,6 +119,67 @@ describe("Supabase schema contract", () => {
     );
     expect(ownComplianceEventsPolicySql).toContain(
       "exists (select 1 from public.x_accounts where x_accounts.id = content_compliance_events.x_account_id and x_accounts.user_id = auth.uid())",
+    );
+  });
+
+  it("defines media rows as account-owned backup evidence", () => {
+    expect(mediaTableSql).toContain(
+      "x_account_id uuid not null references public.x_accounts(id) on delete cascade",
+    );
+    expect(mediaTableSql).toContain(
+      "backup_run_id uuid references public.backup_runs(id) on delete set null",
+    );
+    expect(mediaTableSql).toContain(
+      "tweet_snapshot_id uuid references public.tweet_snapshots(id) on delete set null",
+    );
+    expect(mediaTableSql).toContain("tweet_id text not null");
+    expect(mediaTableSql).toContain("media_key text not null");
+    expect(mediaTableSql).toContain("type text not null");
+    expect(mediaTableSql).toContain("url_or_storage_key text not null");
+    expect(mediaTableSql).toContain("width integer");
+    expect(mediaTableSql).toContain("height integer");
+    expect(mediaTableSql).toContain("duration_ms integer");
+    expect(mediaTableSql).toContain("captured_at timestamptz not null default now()");
+    expect(mediaTableSql).toContain("unique (x_account_id, media_key, captured_at)");
+
+    expect(schemaSql).toContain(
+      "create index media_x_account_id_captured_at_idx on public.media(x_account_id, captured_at desc);",
+    );
+    expect(schemaSql).toContain("create index media_tweet_snapshot_id_idx on public.media(tweet_snapshot_id);");
+    expect(schemaSql).toContain("alter table public.media enable row level security;");
+    expect(ownMediaPolicySql).toContain(
+      "exists (select 1 from public.x_accounts where x_accounts.id = media.x_account_id and x_accounts.user_id = auth.uid())",
+    );
+  });
+
+  it("defines recovery cases as user-owned recovery workflow state", () => {
+    expect(schemaSql).toContain(
+      "create type public.recovery_case_status as enum ('open', 'proof_ready', 'recovering', 'closed', 'canceled');",
+    );
+    expect(recoveryCasesTableSql).toContain(
+      "user_id uuid not null references public.user_profiles(id) on delete cascade",
+    );
+    expect(recoveryCasesTableSql).toContain(
+      "x_account_id uuid not null references public.x_accounts(id) on delete cascade",
+    );
+    expect(recoveryCasesTableSql).toContain(
+      "proof_page_id uuid references public.proof_pages(id) on delete set null",
+    );
+    expect(recoveryCasesTableSql).toContain("status public.recovery_case_status not null default 'open'");
+    expect(recoveryCasesTableSql).toContain("reason text");
+    expect(recoveryCasesTableSql).toContain("opened_at timestamptz not null default now()");
+    expect(recoveryCasesTableSql).toContain("closed_at timestamptz");
+    expect(recoveryCasesTableSql).toContain("updated_at timestamptz not null default now()");
+
+    expect(schemaSql).toContain(
+      "create index recovery_cases_user_id_opened_at_idx on public.recovery_cases(user_id, opened_at desc);",
+    );
+    expect(schemaSql).toContain(
+      "create index recovery_cases_x_account_id_opened_at_idx on public.recovery_cases(x_account_id, opened_at desc);",
+    );
+    expect(schemaSql).toContain("alter table public.recovery_cases enable row level security;");
+    expect(schemaSql).toContain(
+      'create policy "Users can read own recovery cases" on public.recovery_cases for select using (auth.uid() = user_id);',
     );
   });
 
