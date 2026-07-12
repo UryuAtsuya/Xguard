@@ -146,17 +146,20 @@ describe("App", () => {
   });
 
   it(
-    "shows the mobile-first XGuard shell and API readiness",
+    "shows the customer backup flow without internal admin or API details",
     async () => {
       render(<App />);
 
-      expect(screen.getByRole("heading", { name: "守りたいXアカウントを、安全に保全する。" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /@ユーザー名を入力して接続/ })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "管理画面" })).toHaveAttribute("href", "/admin");
+      expect(screen.getByRole("heading", { name: "もしもの前に、Xの記録を守る。" })).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "保全するXアカウント" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "アカウントを確認" })).toBeDisabled();
+      expect(screen.queryByRole("link", { name: "管理画面" })).not.toBeInTheDocument();
+      expect(screen.queryByText("tweet.read")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Rate limit/)).not.toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "管理側の画面" })).not.toBeInTheDocument();
 
       await waitFor(() => {
-        expect(screen.getByText("mock APIに接続済み")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "アカウントを確認" })).toBeEnabled();
       });
     },
     15_000,
@@ -165,17 +168,44 @@ describe("App", () => {
   it("runs the mock backup and shows proof preview data", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /@ユーザー名を入力して接続/ }));
     await waitFor(() => {
-      expect(mockedCompleteOAuthCallback).toHaveBeenCalledWith("mock-authorization-code", "mock-state");
+      expect(screen.getByRole("button", { name: "アカウントを確認" })).toBeEnabled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /復旧用データを保全/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "保全するXアカウント" }), {
+      target: { value: "@xguard_creator" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "アカウントを確認" }));
+    await waitFor(() => {
+      expect(mockedCompleteOAuthCallback).toHaveBeenCalledWith("mock-authorization-code", "mock-state");
+      expect(screen.getByText("@xguard_creator の本人確認が完了しました。")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "保全を開始" }));
 
     await waitFor(() => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "session-token-1");
-      expect(screen.getAllByText("@xguard_creator").length).toBeGreaterThan(0);
-      expect(screen.getByText("証明ページDTOを作成済み")).toBeInTheDocument();
+      expect(screen.getByText("非公開で保管中")).toBeInTheDocument();
+      expect(screen.getByText("投稿 2件を保全済み")).toBeInTheDocument();
+      expect(screen.getByText("復旧に備えたデータの保全が完了しました")).toBeInTheDocument();
+    });
+  });
+
+  it("does not connect when the requested and verified usernames differ", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "アカウントを確認" })).toBeEnabled();
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "保全するXアカウント" }), {
+      target: { value: "another_user" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "アカウントを確認" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("入力した @another_user と、確認できた @xguard_creator が一致しません")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "保全を開始" })).toBeDisabled();
     });
   });
 

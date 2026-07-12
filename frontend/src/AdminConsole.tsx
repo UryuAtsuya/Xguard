@@ -1,23 +1,69 @@
 import { Activity, Bell, Database, KeyRound, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { AdminDatabaseSnapshot, AdminDatabaseTableSummary } from "../../shared/types";
-import type { AdminSnapshotState, PortalStateProps } from "./types";
+import { completeOAuthCallback, fetchAdminDatabaseSnapshot, fetchHealth, startOAuth, type HealthResponse, type OAuthStartResponse } from "./api";
+import type { AdminSnapshotState } from "./types";
 
-interface AdminConsoleProps extends Omit<PortalStateProps, "proof"> {
-  onConnect: () => void;
-  onRefreshDatabase: () => void;
-  snapshot: AdminSnapshotState;
-}
+export function AdminConsole() {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [oauth, setOauth] = useState<OAuthStartResponse | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<AdminSnapshotState>({
+    data: null,
+    status: "管理用セッション接続後にDB snapshotを読み込み",
+  });
+  const [isBusy, setIsBusy] = useState(false);
+  const [notice, setNotice] = useState("管理用APIの状態を確認中");
 
-export function AdminConsole({
-  backupRun,
-  health,
-  isBusy,
-  notice,
-  oauth,
-  onConnect,
-  onRefreshDatabase,
-  snapshot,
-}: AdminConsoleProps) {
+  useEffect(() => {
+    fetchHealth()
+      .then((response) => {
+        setHealth(response);
+        setNotice("管理用APIに接続済み");
+      })
+      .catch(() => setNotice("管理用APIに接続できません"));
+  }, []);
+
+  async function refreshDatabase(nextSessionToken = sessionToken) {
+    if (!nextSessionToken) {
+      setSnapshot({ data: null, status: "先に管理用セッションへ接続してください" });
+      return;
+    }
+
+    setSnapshot((current) => ({ ...current, status: "DB snapshotを更新中" }));
+
+    try {
+      const data = await fetchAdminDatabaseSnapshot(nextSessionToken);
+      setSnapshot({ data, status: "DB snapshotを取得済み" });
+    } catch {
+      setSnapshot((current) => ({ ...current, status: "DB snapshot取得に失敗" }));
+    }
+  }
+
+  async function handleConnect() {
+    setIsBusy(true);
+    setNotice("管理用セッションを準備中");
+
+    try {
+      const response = await startOAuth();
+      setOauth(response);
+
+      if (response.mode !== "mock") {
+        setNotice("管理者認証は未設定です");
+        return;
+      }
+
+      const callback = await completeOAuthCallback("mock-authorization-code", response.state);
+      setSessionToken(callback.sessionToken);
+      await refreshDatabase(callback.sessionToken);
+      setNotice("管理用セッションに接続済み");
+    } catch {
+      setNotice("管理用セッションに接続できませんでした");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   return (
     <section className="admin-console" aria-label="管理側の画面">
       <aside className="admin-sidebar">
@@ -52,7 +98,11 @@ export function AdminConsole({
         <section className="admin-kpis" id="overview" aria-label="運用指標">
           <KpiCard label="API" value={health?.ok ? "online" : "checking"} tone="good" />
           <KpiCard label="OAuth" value={oauth?.mode ?? "mock ready"} tone="neutral" />
-          <KpiCard label="Saved posts" value={`${backupRun?.tweetsCaptured ?? 0}`} tone="neutral" />
+          <KpiCard
+            label="Saved posts"
+            value={`${snapshot.data?.backupRuns.reduce((total, run) => total + run.tweetsCaptured, 0) ?? 0}`}
+            tone="neutral"
+          />
           <KpiCard label="Proof privacy" value="private default" tone="good" />
         </section>
 
@@ -62,11 +112,11 @@ export function AdminConsole({
             <span>{snapshot.status}</span>
           </div>
           <div className="hero-actions">
-            <button className="primary-action" type="button" onClick={onConnect} disabled={isBusy}>
+            <button className="primary-action" type="button" onClick={handleConnect} disabled={isBusy}>
               <KeyRound aria-hidden="true" size={18} />
               接続
             </button>
-            <button className="secondary-action" type="button" onClick={onRefreshDatabase} disabled={isBusy}>
+            <button className="secondary-action" type="button" onClick={() => refreshDatabase()} disabled={isBusy || !sessionToken}>
               <RefreshCw aria-hidden="true" size={18} />
               DB更新
             </button>
