@@ -152,7 +152,7 @@ describe("App", () => {
 
       expect(screen.getByRole("heading", { name: "消える前に、証明を残す。" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "管理画面" })).toHaveAttribute("href", "/admin");
+      expect(screen.queryByRole("link", { name: "管理画面" })).not.toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "管理側の画面" })).not.toBeInTheDocument();
 
       await waitFor(() => {
@@ -183,6 +183,7 @@ describe("App", () => {
     window.history.pushState({}, "", "/admin");
     render(<App />);
 
+    expect(screen.getByRole("link", { name: "顧客画面を確認" })).toHaveAttribute("href", "/");
     fireEvent.click(screen.getByRole("button", { name: "接続" }));
 
     await waitFor(() => {

@@ -142,9 +142,11 @@ export function App() {
             <small>Account continuity</small>
           </span>
         </div>
-        <nav className="audience-links" aria-label="画面リンク">
-          {activeView === "admin" ? <a href="/">顧客画面を確認</a> : <a href="/admin">管理画面</a>}
-        </nav>
+        {activeView === "admin" ? (
+          <nav className="audience-links" aria-label="画面リンク">
+            <a href="/">顧客画面を確認</a>
+          </nav>
+        ) : null}
       </header>
 
       {activeView === "customer" ? (
