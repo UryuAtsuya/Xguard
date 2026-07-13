@@ -150,8 +150,8 @@ describe("App", () => {
     async () => {
       render(<App />);
 
-      expect(screen.getByRole("heading", { name: "守りたいXアカウントを、安全に保全する。" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /@ユーザー名を入力して接続/ })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "消える前に、証明を残す。" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Xを安全に接続/ })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "管理画面" })).toHaveAttribute("href", "/admin");
       expect(screen.queryByRole("region", { name: "管理側の画面" })).not.toBeInTheDocument();
 
@@ -165,12 +165,12 @@ describe("App", () => {
   it("runs the mock backup and shows proof preview data", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /@ユーザー名を入力して接続/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Xを安全に接続/ }));
     await waitFor(() => {
       expect(mockedCompleteOAuthCallback).toHaveBeenCalledWith("mock-authorization-code", "mock-state");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /復旧用データを保全/ }));
+    fireEvent.click(screen.getByRole("button", { name: /今すぐバックアップ/ }));
 
     await waitFor(() => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "session-token-1");
