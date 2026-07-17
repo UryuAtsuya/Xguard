@@ -9,6 +9,7 @@
     "build": "npm run build:api && npm run build:web",
     "build:api": "tsc -p tsconfig.build.json",
     "build:web": "vite build --config frontend/vite.config.ts",
+    "build:sites": "npm run build:web && node scripts/build-sites.mjs",
     "test": "vitest run --configLoader runner",
     "check:supabase-integration-env": "node scripts/supabase-integration-preflight.mjs",
     "check": "npm run build && npm run test"

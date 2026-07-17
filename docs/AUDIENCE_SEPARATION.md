@@ -4,6 +4,8 @@
 
 Issue #21 / #22 の最初の対応として、XGuard の frontend はお客様画面と管理画面を URL レベルで分離する。
 
+directory、state、API、CSS、test の target boundary は [frontend の画面境界とディレクトリ構造](./FRONTEND_DIRECTORY_STRUCTURE.md) を正本とする。
+
 - お客様画面: `/`
 - 管理画面: `/admin`
 

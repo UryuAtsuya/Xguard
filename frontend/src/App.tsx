@@ -30,7 +30,10 @@ export function App() {
       <header className="app-header">
         <a className="brand-mark" href="/" aria-label="XGuard トップ">
           <ShieldCheck aria-hidden="true" size={22} />
-          <span>XGuard</span>
+          <span className="brand-copy">
+            <strong>XGuard</strong>
+            <small>Account continuity</small>
+          </span>
         </a>
         {activeView === "admin" ? (
           <nav className="audience-links" aria-label="画面リンク">

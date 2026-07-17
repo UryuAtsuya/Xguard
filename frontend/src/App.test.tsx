@@ -213,6 +213,7 @@ describe("App", () => {
     window.history.pushState({}, "", "/admin");
     render(<App />);
 
+    expect(screen.getByRole("link", { name: "顧客画面を確認" })).toHaveAttribute("href", "/");
     fireEvent.click(screen.getByRole("button", { name: "接続" }));
 
     await waitFor(() => {

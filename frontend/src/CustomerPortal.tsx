@@ -131,7 +131,11 @@ export function CustomerPortal() {
           <span>現在の状況</span>
           <strong>{phaseLabel[phase]}</strong>
         </div>
-        <p>{notice}</p>
+        <p className="status-notice">{notice}</p>
+        <div className="status-details">
+          <InfoRow label="公開設定" value={proof ? "確認待ち" : "非公開"} />
+          <InfoRow label="接続権限" value="読み取り専用" />
+        </div>
       </aside>
 
       <ol className="customer-workflow" aria-label="保全の流れ">
@@ -195,6 +199,15 @@ function ProofSummary({ proof, backupRun }: { proof: ProofPublicPayload; backupR
 
 function normalizeUsername(value: string) {
   return value.trim().replace(/^@/, "");
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="info-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 const phaseLabel: Record<CustomerFlowPhase, string> = {
