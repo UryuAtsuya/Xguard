@@ -1,76 +1,135 @@
-import {
-  BadgeCheck,
-  Ban,
-  DatabaseBackup,
-  EyeOff,
-  FileCheck2,
-  KeyRound,
-  LockKeyhole,
-  MessageCircleOff,
-  ShieldCheck,
-  UserRoundX,
-} from "lucide-react";
-import type { ProofPublicPayload } from "../../shared/types";
-import type { PortalStateProps } from "./types";
+import { Check, DatabaseBackup, FileCheck2, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import type { BackupRun, ProofPublicPayload, XAccount } from "../../shared/types";
+import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse } from "./api";
+import type { CustomerFlowPhase } from "./types";
 
-interface CustomerPortalProps extends PortalStateProps {
-  onBackup: () => void;
-  onConnect: () => void;
-  readiness: number;
-}
+const usernamePattern = /^[A-Za-z0-9_]{1,15}$/;
 
-export function CustomerPortal({
-  backupRun,
-  health,
-  isBusy,
-  notice,
-  oauth,
-  onBackup,
-  onConnect,
-  proof,
-  readiness,
-}: CustomerPortalProps) {
+export function CustomerPortal() {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [username, setUsername] = useState("");
+  const [connectedAccount, setConnectedAccount] = useState<XAccount | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [backupRun, setBackupRun] = useState<BackupRun | null>(null);
+  const [proof, setProof] = useState<ProofPublicPayload | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [notice, setNotice] = useState("保全したいXアカウントを入力してください");
+
+  useEffect(() => {
+    fetchHealth()
+      .then((response) => setHealth(response))
+      .catch(() => setNotice("現在サービスに接続できません。時間をおいて再度お試しください。"));
+  }, []);
+
+  const phase = useMemo<CustomerFlowPhase>(() => {
+    if (proof && backupRun?.status === "completed") return "ready";
+    if (connectedAccount && sessionToken) return "backup";
+    return "account";
+  }, [backupRun?.status, connectedAccount, proof, sessionToken]);
+
+  async function handleConnect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const requestedUsername = normalizeUsername(username);
+
+    if (!usernamePattern.test(requestedUsername)) {
+      setNotice("Xのユーザー名を15文字以内の半角英数字または_で入力してください");
+      return;
+    }
+
+    setIsBusy(true);
+    setNotice(`@${requestedUsername} の本人確認を準備しています`);
+
+    try {
+      const response = await startOAuth();
+
+      if (response.mode === "configured") {
+        window.location.assign(response.authorizationUrl);
+        return;
+      }
+
+      const callback = await completeOAuthCallback("mock-authorization-code", response.state);
+
+      if (normalizeUsername(callback.connectedAccount.username) !== requestedUsername) {
+        setNotice(`入力した @${requestedUsername} と、確認できた @${callback.connectedAccount.username} が一致しません`);
+        return;
+      }
+
+      setUsername(requestedUsername);
+      setConnectedAccount(callback.connectedAccount);
+      setSessionToken(callback.sessionToken);
+      setNotice(`@${callback.connectedAccount.username} を確認できました。次に保全を開始してください。`);
+    } catch {
+      setNotice("アカウントの確認を開始できませんでした。もう一度お試しください。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleBackup() {
+    if (!sessionToken) {
+      setNotice("先にXアカウントの本人確認を完了してください");
+      return;
+    }
+
+    setIsBusy(true);
+    setNotice("プロフィールと直近の投稿を保全しています");
+
+    try {
+      const response = await runBackup(25, sessionToken);
+      setBackupRun(response.backupRun);
+      setProof(response.proofPayload);
+      setNotice("復旧に備えたデータの保全が完了しました");
+    } catch {
+      setNotice("データを保全できませんでした。時間をおいて再度お試しください。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   return (
     <section className="customer-portal" aria-label="お客様が見る画面">
-      <div className="customer-hero">
-        <p className="eyebrow">
-          <LockKeyhole aria-hidden="true" size={14} />
-          Private by default
-        </p>
-        <h1>消える前に、<span className="accent-text">証明を残す。</span></h1>
-        <p className="hero-text">
-          大切なプロフィールと投稿を読み取り専用で保全。もしもの時も、あなたが積み重ねた活動を証明できる状態に整えます。
-        </p>
-        <div className="hero-actions">
-          <button className="primary-action" type="button" onClick={onConnect} disabled={isBusy}>
-            <KeyRound aria-hidden="true" size={18} />
-            Xを安全に接続
-          </button>
-          <button className="secondary-action" type="button" onClick={onBackup} disabled={isBusy}>
-            <DatabaseBackup aria-hidden="true" size={18} />
-            今すぐバックアップ
-          </button>
+      <section className="customer-hero">
+        <div className="customer-hero-copy">
+          <p className="eyebrow">X account backup</p>
+          <h1>
+            もしもの前に、<span className="no-break">Xの記録を守る。</span>
+          </h1>
+          <p className="hero-text">アカウントを確認し、投稿とプロフィールを読み取り専用で保全します。投稿・DM・フォロー操作は行いません。</p>
         </div>
-        <ul className="safety-list" aria-label="XGuardが行わない操作">
-          <SafetyItem icon={<Ban aria-hidden="true" size={15} />} label="投稿なし" />
-          <SafetyItem icon={<MessageCircleOff aria-hidden="true" size={15} />} label="DMなし" />
-          <SafetyItem icon={<UserRoundX aria-hidden="true" size={15} />} label="フォロー操作なし" />
-        </ul>
-      </div>
+
+        <form className="account-form" onSubmit={handleConnect} noValidate>
+          <label htmlFor="x-username">保全するXアカウント</label>
+          <div className="username-field">
+            <span aria-hidden="true">@</span>
+            <input
+              id="x-username"
+              name="username"
+              type="text"
+              inputMode="text"
+              autoComplete="username"
+              placeholder="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              disabled={isBusy || phase !== "account"}
+              aria-describedby="username-help"
+            />
+          </div>
+          <p id="username-help">本人確認のため、このあとXの認証画面へ進みます。</p>
+          <button className="primary-action" type="submit" disabled={isBusy || phase !== "account" || !health?.ok}>
+            <KeyRound aria-hidden="true" size={18} />
+            アカウントを確認
+          </button>
+        </form>
+      </section>
 
       <aside className="customer-status" aria-live="polite">
-        <div className="panel-header">
-          <span>Backup readiness</span>
-          <span className="live-badge">{health?.ok ? "Connected" : "Checking"}</span>
+        <div className="status-icon" data-ready={phase === "ready"}>
+          <ShieldCheck aria-hidden="true" size={24} />
         </div>
-        <div className="readiness-ring" style={{ "--readiness": `${readiness * 3.6}deg` } as React.CSSProperties}>
-          <div>
-            <strong>{readiness}</strong>
-            <span>%</span>
-          </div>
-        </div>
-        <div className="progress-track" aria-label={`バックアップ準備 ${readiness}%`}>
-          <span style={{ width: `${readiness}%` }} />
+        <div>
+          <span>現在の状況</span>
+          <strong>{phaseLabel[phase]}</strong>
         </div>
         <p className="status-notice">{notice}</p>
         <div className="status-details">
@@ -79,92 +138,67 @@ export function CustomerPortal({
         </div>
       </aside>
 
-      <div className="workflow-heading">
-        <div>
-          <p className="eyebrow">Simple, private, reversible</p>
-          <h2>3ステップで、もしもに備える。</h2>
-        </div>
-        <p>接続から証明ページの準備まで、必要な操作だけに絞りました。</p>
-      </div>
-
-      <section className="customer-workflow" aria-label="お客様の基本動作">
-        <ProcessCard step="01" title="安全に接続" value={oauth ? `${oauth.scopes.length} scopes` : "read only"}>
-          <ScopeList scopes={oauth?.scopes ?? ["tweet.read", "users.read", "offline.access"]} />
-        </ProcessCard>
-        <ProcessCard step="02" title="データを保全" value={backupRun ? `${backupRun.tweetsCaptured} posts` : "waiting"}>
-          <InfoRow label="API" value={health?.ok ? "online" : "checking"} />
-          <InfoRow label="Rate limit" value={`${backupRun?.rateLimitRemaining ?? 1499} left`} />
-        </ProcessCard>
-        <ProcessCard step="03" title="証明を準備" value={proof ? `@${proof.username}` : "private"}>
-          {proof ? <ProofPreview proof={proof} /> : <EmptyProof />}
-          <button className="secondary-action full-width" type="button" disabled={!proof}>
-            <EyeOff aria-hidden="true" size={18} />
-            証明ページを失効
+      <ol className="customer-workflow" aria-label="保全の流れ">
+        <FlowStep number="1" title="アカウント確認" state={phase === "account" ? "current" : "complete"}>
+          <p>{connectedAccount ? `@${connectedAccount.username} の本人確認が完了しました。` : "ユーザー名を入力し、Xで本人確認します。"}</p>
+        </FlowStep>
+        <FlowStep number="2" title="データを保全" state={phase === "backup" ? "current" : phase === "ready" ? "complete" : "pending"}>
+          <p>プロフィールと直近25件の投稿を読み取り専用で保存します。</p>
+          <button className="primary-action full-width" type="button" onClick={handleBackup} disabled={isBusy || phase !== "backup"}>
+            <DatabaseBackup aria-hidden="true" size={18} />
+            保全を開始
           </button>
-        </ProcessCard>
-      </section>
+        </FlowStep>
+        <FlowStep number="3" title="復旧に備える" state={phase === "ready" ? "complete" : "pending"}>
+          {proof && backupRun ? <ProofSummary proof={proof} backupRun={backupRun} /> : <p>保全後、復旧に使えるデータの概要を確認できます。</p>}
+        </FlowStep>
+      </ol>
     </section>
   );
 }
 
-function SafetyItem({ icon, label }: { icon: React.ReactNode; label: string }) {
+function FlowStep({
+  children,
+  number,
+  state,
+  title,
+}: {
+  children: React.ReactNode;
+  number: string;
+  state: "complete" | "current" | "pending";
+  title: string;
+}) {
   return (
-    <li>
-      {icon}
-      <span>{label}</span>
+    <li className="flow-step" data-state={state}>
+      <div className="step-heading">
+        <span className="step-number">{state === "complete" ? <Check aria-label="完了" size={18} /> : number}</span>
+        <h2>{title}</h2>
+      </div>
+      <div className="step-body">{children}</div>
     </li>
   );
 }
 
-function ProcessCard({ children, step, title, value }: { children: React.ReactNode; step: string; title: string; value: string }) {
+function ProofSummary({ proof, backupRun }: { proof: ProofPublicPayload; backupRun: BackupRun }) {
   return (
-    <article className="process-card">
-      <div className="panel-header">
-        <span className="process-title"><small>{step}</small>{title}</span>
-        <strong>{value}</strong>
-      </div>
-      <div className="process-body">{children}</div>
-    </article>
-  );
-}
-
-function ScopeList({ scopes }: { scopes: string[] }) {
-  return (
-    <ul className="scope-list" aria-label="OAuth scopes">
-      {scopes.map((scope) => (
-        <li key={scope}>
-          <BadgeCheck aria-hidden="true" size={16} />
-          <span>{scope}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ProofPreview({ proof }: { proof: ProofPublicPayload }) {
-  return (
-    <div className="proof-preview">
+    <div className="proof-summary">
       <div className="proof-identity">
         <LockKeyhole aria-hidden="true" size={18} />
         <div>
           <strong>@{proof.username}</strong>
-          <span>{proof.displayName ?? "XGuard user"}</span>
+          <span>非公開で保管中</span>
         </div>
       </div>
-      <InfoRow label="保存投稿" value={`${proof.snapshotCounts.tweets}`} />
-      <InfoRow label="代表投稿" value={`${proof.representativeTweets.length}`} />
-      <p>{proof.representativeTweets[0]?.text ?? "No public tweet selected."}</p>
+      <div className="summary-count">
+        <FileCheck2 aria-hidden="true" size={18} />
+        <span>投稿 {backupRun.tweetsCaptured}件を保全済み</span>
+      </div>
     </div>
   );
 }
 
-function EmptyProof() {
-  return (
-    <div className="proof-preview empty">
-      <FileCheck2 aria-hidden="true" size={18} />
-      <p>バックアップ後に、公開内容を確認できる証明プレビューが表示されます。</p>
-    </div>
-  );
+function normalizeUsername(value: string) {
+  return value.trim().replace(/^@/, "");
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -175,3 +209,9 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+const phaseLabel: Record<CustomerFlowPhase, string> = {
+  account: "アカウント確認前",
+  backup: "保全を開始できます",
+  ready: "保全済み",
+};
