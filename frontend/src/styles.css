@@ -117,7 +117,9 @@ p {
 
 .brand-mark {
   gap: 10px;
-  color: var(--gold-bright);
+  color: var(--ink);
+  font-weight: 900;
+  text-decoration: none;
 }
 
 .brand-mark > svg {
@@ -174,14 +176,14 @@ p {
 
 .customer-portal {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 350px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   margin-top: 18px;
 }
 
 .customer-hero,
 .customer-status,
-.process-card,
+.flow-step,
 .admin-sidebar,
 .admin-main,
 .admin-action-bar,
@@ -198,11 +200,12 @@ p {
   position: relative;
   isolation: isolate;
   display: grid;
-  align-content: center;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  align-items: center;
+  gap: 36px;
   min-height: 540px;
   overflow: hidden;
-  padding: clamp(34px, 6vw, 72px);
+  padding: clamp(34px, 5vw, 64px);
   border-radius: 30px;
 }
 
@@ -233,6 +236,16 @@ p {
   box-shadow: 0 0 80px rgba(231, 198, 135, 0.08) inset;
 }
 
+.customer-hero-copy {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.customer-hero h1 {
+  font-size: clamp(42px, 5vw, 64px);
+}
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -254,9 +267,9 @@ h1 {
 }
 
 h2 {
-  font-size: clamp(28px, 3.5vw, 42px);
-  line-height: 1.16;
-  letter-spacing: -0.035em;
+  font-size: 20px;
+  line-height: 1.18;
+  letter-spacing: 0;
 }
 
 .accent-text {
@@ -271,6 +284,59 @@ h2 {
   color: var(--muted);
   font-size: clamp(15px, 1.7vw, 18px);
   line-height: 1.85;
+}
+
+.account-form {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.account-form label {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.account-form > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.username-field {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.username-field:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.username-field span {
+  padding-left: 14px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.username-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 14px 14px 14px 3px;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
 }
 
 .hero-actions,
@@ -357,15 +423,43 @@ h2 {
 
 .customer-status {
   display: grid;
-  align-content: center;
-  justify-items: stretch;
+  grid-template-columns: auto minmax(180px, 240px) minmax(0, 1fr) minmax(180px, 220px);
+  align-items: center;
   gap: 18px;
-  min-height: 540px;
-  padding: 30px;
-  border-radius: 30px;
+  padding: 20px;
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.075), transparent 45%),
     rgba(20, 14, 26, 0.9);
+}
+
+.customer-status > div:not(.status-icon) {
+  display: grid;
+  gap: 5px;
+}
+
+.customer-status span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.customer-status strong {
+  font-size: 24px;
+}
+
+.status-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--teal);
+}
+
+.status-icon[data-ready="true"] {
+  background: var(--teal);
+  color: #fff;
 }
 
 .panel-header,
@@ -463,6 +557,7 @@ h2 {
   background: linear-gradient(90deg, var(--gold), var(--magenta));
 }
 
+.customer-status p,
 .status-notice {
   color: var(--muted);
   font-size: 13px;
@@ -499,9 +594,8 @@ h2 {
 
 .customer-workflow {
   display: grid;
-  grid-column: 1 / -1;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .process-card {
@@ -550,6 +644,58 @@ h2 {
   list-style: none;
 }
 
+.flow-step {
+  min-width: 0;
+  padding: 20px;
+  box-shadow: none;
+}
+
+.flow-step[data-state="current"] {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.08);
+}
+
+.flow-step[data-state="pending"] {
+  background: var(--surface-muted);
+}
+
+.step-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.step-number {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.flow-step[data-state="complete"] .step-number,
+.flow-step[data-state="current"] .step-number {
+  background: var(--teal);
+  color: #fff;
+}
+
+.step-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0 0 46px;
+}
+
+.step-body > p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
 .scope-list li {
   display: flex;
   align-items: center;
@@ -571,9 +717,9 @@ h2 {
   color: var(--teal);
 }
 
-.proof-preview {
+.proof-summary {
   display: grid;
-  gap: 10px;
+  gap: 14px;
   min-height: 168px;
   padding: 14px;
   border: 1px solid var(--line);
@@ -618,6 +764,14 @@ h2 {
 
 .full-width {
   width: 100%;
+}
+
+.summary-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .admin-console {
@@ -813,6 +967,8 @@ h2 {
   }
 
   .customer-portal,
+  .customer-hero,
+  .customer-status,
   .customer-workflow,
   .admin-console,
   .admin-kpis,
@@ -883,12 +1039,28 @@ h2 {
     padding: 42px 22px 30px;
   }
 
+  .customer-hero {
+    gap: 24px;
+  }
+
+  .account-form {
+    padding: 16px;
+  }
+
+  .step-body {
+    padding-left: 0;
+  }
+
   h1 {
     font-size: clamp(46px, 15vw, 64px);
   }
 
   h2 {
     font-size: 30px;
+  }
+
+  .flow-step h2 {
+    font-size: 20px;
   }
 
   .hero-actions,
@@ -907,7 +1079,7 @@ h2 {
   }
 
   .customer-status {
-    min-height: 440px;
+    min-height: auto;
     padding: 25px 22px;
   }
 
