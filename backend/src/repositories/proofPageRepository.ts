@@ -18,6 +18,7 @@ export interface ProofPageRepository {
   create(entry: ProofPageEntry): Promise<void>;
   findByRunId(runId: string): Promise<ProofPageEntry | null>;
   listByUser(userId: string): Promise<ProofPageEntry[]>;
+  listAll(): Promise<ProofPageEntry[]>;
   updateVisibility(
     runId: string,
     visibility: ProofPageVisibility,
@@ -46,6 +47,12 @@ export class InMemoryProofPageRepository implements ProofPageRepository {
   async listByUser(userId: string): Promise<ProofPageEntry[]> {
     return [...this.entries.values()]
       .filter((entry) => entry.userId === userId)
+      .sort((left, right) => right.backupRun.createdAt.localeCompare(left.backupRun.createdAt))
+      .map(cloneProofPageEntry);
+  }
+
+  async listAll(): Promise<ProofPageEntry[]> {
+    return [...this.entries.values()]
       .sort((left, right) => right.backupRun.createdAt.localeCompare(left.backupRun.createdAt))
       .map(cloneProofPageEntry);
   }
@@ -103,6 +110,7 @@ export interface SupabaseProofPageStore {
   }): Promise<SupabaseProofPageEntryRow>;
   findProofPageByRunId(runId: string): Promise<SupabaseProofPageEntryRow | null>;
   listProofPagesByUser(userId: string): Promise<SupabaseProofPageEntryRow[]>;
+  listAllProofPages(): Promise<SupabaseProofPageEntryRow[]>;
   updateProofPageVisibility(input: {
     backup_run_id: string;
     visibility: ProofPageVisibility;
@@ -152,6 +160,11 @@ export class SupabaseProofPageRepository implements ProofPageRepository {
 
   async listByUser(userId: string): Promise<ProofPageEntry[]> {
     const rows = await this.store.listProofPagesByUser(userId);
+    return rows.map(rowToProofPageEntry);
+  }
+
+  async listAll(): Promise<ProofPageEntry[]> {
+    const rows = await this.store.listAllProofPages();
     return rows.map(rowToProofPageEntry);
   }
 

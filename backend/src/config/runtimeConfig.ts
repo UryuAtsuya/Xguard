@@ -5,6 +5,9 @@ export interface RuntimeConfig {
   complianceConfirmed: boolean;
   appBaseUrl?: string;
   corsAllowedOrigins?: string[];
+  customerCorsAllowedOrigins?: string[];
+  adminCorsAllowedOrigins?: string[];
+  adminAuth?: AdminAuthRuntimeConfig;
   xOAuth: XOAuthRuntimeConfig;
   oauthStateTtlSeconds: number;
   oauthPkceVerifierBytes: number;
@@ -17,6 +20,12 @@ export interface RuntimeConfig {
 export type OAuthStatusExposure = "disabled" | "deployment_diagnostic";
 export type OAuthStateRepositoryMode = "memory" | "supabase";
 export type ContentComplianceEventRepositoryMode = "memory" | "supabase";
+export type AdminAuthRuntimeConfig =
+  | { mode: "disabled" }
+  | {
+      mode: "supabase";
+      redirectUrl: string;
+    };
 
 export type XOAuthRuntimeConfig =
   | {
@@ -49,6 +58,13 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   const port = parsePort(env.PORT);
   const appBaseUrl = parseOptionalUrl("APP_BASE_URL", env.APP_BASE_URL);
   const corsAllowedOrigins = parseCorsAllowedOrigins(env.CORS_ORIGINS, appBaseUrl, nodeEnv);
+  const customerCorsAllowedOrigins =
+    parseExplicitCorsOrigins("CUSTOMER_CORS_ORIGINS", env.CUSTOMER_CORS_ORIGINS) ??
+    corsAllowedOrigins;
+  const adminCorsAllowedOrigins =
+    parseExplicitCorsOrigins("ADMIN_CORS_ORIGINS", env.ADMIN_CORS_ORIGINS) ??
+    (nodeEnv === "production" ? [] : undefined);
+  const adminAuth = parseAdminAuth(env.ADMIN_AUTH_MODE, env.ADMIN_REDIRECT_URL, nodeEnv);
   const fallbackCallbackUrl = joinUrlPath(appBaseUrl ?? `http://localhost:${port}`, "/api/x/oauth/callback");
   const callbackUrl = parseOptionalUrl("X_CALLBACK_URL", env.X_CALLBACK_URL) ?? fallbackCallbackUrl;
   const clientId = env.X_CLIENT_ID?.trim();
@@ -97,6 +113,9 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       complianceConfirmed,
       appBaseUrl,
       corsAllowedOrigins,
+      customerCorsAllowedOrigins,
+      adminCorsAllowedOrigins,
+      adminAuth,
       oauthStateTtlSeconds,
       oauthPkceVerifierBytes,
       oauthStatusExposure,
@@ -120,6 +139,9 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     complianceConfirmed,
     appBaseUrl,
     corsAllowedOrigins,
+    customerCorsAllowedOrigins,
+    adminCorsAllowedOrigins,
+    adminAuth,
     oauthStateTtlSeconds,
     oauthPkceVerifierBytes,
     oauthStatusExposure,
@@ -133,6 +155,33 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       clientSecretConfigured: Boolean(clientSecret),
     },
   };
+}
+
+function parseAdminAuth(
+  modeValue: string | undefined,
+  redirectValue: string | undefined,
+  nodeEnv: string,
+): AdminAuthRuntimeConfig {
+  const mode = modeValue?.trim() || "disabled";
+
+  if (nodeEnv === "production" && mode === "disabled") {
+    throw new Error("invalid_runtime_env:ADMIN_AUTH_MODE");
+  }
+
+  if (mode === "disabled") {
+    return { mode: "disabled" };
+  }
+
+  if (mode !== "supabase") {
+    throw new Error("invalid_runtime_env:ADMIN_AUTH_MODE");
+  }
+
+  const redirectUrl = parseOptionalUrl("ADMIN_REDIRECT_URL", redirectValue);
+  if (!redirectUrl || (nodeEnv === "production" && !isSecurePublicUrl(redirectUrl))) {
+    throw new Error("invalid_runtime_env:ADMIN_REDIRECT_URL");
+  }
+
+  return { mode: "supabase", redirectUrl };
 }
 
 function parseOAuthStateRepository(value: string | undefined): OAuthStateRepositoryMode {
@@ -228,6 +277,15 @@ function parseCorsAllowedOrigins(
   }
 
   return undefined;
+}
+
+function parseExplicitCorsOrigins(fieldName: string, value: string | undefined): string[] | undefined {
+  const origins = value
+    ?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins?.length ? origins.map((origin) => parseUrlOrigin(fieldName, origin)) : undefined;
 }
 
 function parsePort(value: string | undefined): number {

@@ -1,6 +1,6 @@
 import { Check, DatabaseBackup, FileCheck2, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import type { BackupRun, ProofPublicPayload, XAccount } from "../../shared/types";
+import type { BackupRun, ProofPublicPayload, XAccount } from "../../../shared/types";
 import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse } from "./api";
 import type { CustomerFlowPhase } from "./types";
 

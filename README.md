@@ -37,7 +37,7 @@ v0の目的は、BANされたアカウントを自動復活させることでは
 
 ```text
 backend/       Express API prototype、mock X client、token repository boundary
-frontend/      Vite + React prototype、mobile-first XGuard操作画面
+frontend/      customer/adminを別entry・別bundleにした2つのVite + React app
 shared/        将来frontend/backendで共有するTypeScript DTO
 supabase/      auth profile、X backup、proof page、compliance、Stripe eventの初期schema
 ```
@@ -47,7 +47,8 @@ supabase/      auth profile、X backup、proof page、compliance、Stripe event�
 ```bash
 npm install
 npm run dev:api
-npm run dev:web
+npm run dev:web:customer
+npm run dev:web:admin
 ```
 
 検証:
@@ -56,7 +57,7 @@ npm run dev:web
 npm run check
 ```
 
-`dev:web` は `http://localhost:5173` で起動し、`/api` と `/health` を `http://localhost:4000` のbackend prototypeへproxyします。
+customerは `http://localhost:5173`、adminは `http://localhost:5174` で起動し、どちらも `/api` と `/health` を `http://localhost:4000` のbackendへproxyします。`dev:web` はcustomer起動のaliasです。
 
 ## 環境変数
 
@@ -65,6 +66,12 @@ npm run check
 ```env
 PORT=4000
 APP_BASE_URL=http://localhost:4000
+CUSTOMER_CORS_ORIGINS=http://localhost:5173
+ADMIN_CORS_ORIGINS=http://localhost:5174
+ADMIN_AUTH_MODE=disabled
+ADMIN_REDIRECT_URL=http://localhost:5174/auth/callback
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
 X_CLIENT_ID=
 X_CLIENT_SECRET=
 X_CALLBACK_URL=
@@ -73,6 +80,12 @@ X_CALLBACK_URL=
 - `X_CLIENT_ID`: mock modeからconfigured modeへ切り替える最小スイッチ。`NODE_ENV=production` では必須です。
 - `X_CALLBACK_URL`: 明示したcallback URL。未設定時は `APP_BASE_URL` またはlocal portから生成します。`NODE_ENV=production` ではHTTPSを必須とし、localhost/loopback callbackを拒否します。
 - `X_CLIENT_SECRET`: 現時点では検知のみ。token exchangeはまだ未実装です。`NODE_ENV=production` では必須で、configured callback では prototype token refs / session を発行せず、`501` で停止します。
+- `CUSTOMER_CORS_ORIGINS` / `ADMIN_CORS_ORIGINS`: customer APIとadmin APIのbrowser origin allowlist。productionでは別originを明示します。
+- `ADMIN_AUTH_MODE`: local mockでは`disabled`、productionでは`supabase`が必須です。
+- `ADMIN_REDIRECT_URL`: Supabase magic linkのadmin callback URLです。
+- `SUPABASE_SERVICE_ROLE_KEY`: backendと`npm run admin:bootstrap`専用です。frontendへ渡しません。
+
+frontendのpublic build値と詳しい認証・配信境界は `docs/AUDIENCE_SEPARATION.md` を参照してください。
 
 ## 正本
 

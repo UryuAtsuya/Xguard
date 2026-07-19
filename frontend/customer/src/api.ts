@@ -1,4 +1,4 @@
-import type { AdminDatabaseSnapshot, BackupRun, ProofPublicPayload } from "../../shared/types";
+import type { BackupRun, ProofPublicPayload, XAccount } from "../../../shared/types";
 
 export interface HealthResponse {
   ok: boolean;
@@ -18,11 +18,7 @@ export interface OAuthStartResponse {
 }
 
 export interface OAuthCallbackResponse {
-  connectedAccount: {
-    id: string;
-    username: string;
-    displayName?: string;
-  };
+  connectedAccount: XAccount;
   sessionToken: string;
   tokenStorage: "repository-ref-only";
   writesEnabled: boolean;
@@ -35,20 +31,20 @@ export interface BackupRunResponse {
 
 const apiBaseUrl = import.meta.env.VITE_XGUARD_API_BASE_URL ?? "";
 
-export async function fetchHealth(): Promise<HealthResponse> {
+export function fetchHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
 }
 
-export async function startOAuth(): Promise<OAuthStartResponse> {
+export function startOAuth(): Promise<OAuthStartResponse> {
   return requestJson<OAuthStartResponse>("/api/x/oauth/start");
 }
 
-export async function completeOAuthCallback(code: string, state: string): Promise<OAuthCallbackResponse> {
+export function completeOAuthCallback(code: string, state: string): Promise<OAuthCallbackResponse> {
   const params = new URLSearchParams({ code, state });
   return requestJson<OAuthCallbackResponse>(`/api/x/oauth/callback?${params.toString()}`);
 }
 
-export async function runBackup(tweetLimit: number, sessionToken: string): Promise<BackupRunResponse> {
+export function runBackup(tweetLimit: number, sessionToken: string): Promise<BackupRunResponse> {
   return requestJson<BackupRunResponse>("/api/backup/run", {
     method: "POST",
     headers: {
@@ -56,14 +52,6 @@ export async function runBackup(tweetLimit: number, sessionToken: string): Promi
       "content-type": "application/json",
     },
     body: JSON.stringify({ tweetLimit }),
-  });
-}
-
-export async function fetchAdminDatabaseSnapshot(sessionToken: string): Promise<AdminDatabaseSnapshot> {
-  return requestJson<AdminDatabaseSnapshot>("/api/admin/database-snapshot", {
-    headers: {
-      authorization: `Bearer ${sessionToken}`,
-    },
   });
 }
 

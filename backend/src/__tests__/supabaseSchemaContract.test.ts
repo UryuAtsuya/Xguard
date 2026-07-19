@@ -10,6 +10,16 @@ const usageLedgerFunctionSql =
 const xOauthConnectionsTableSql =
   schemaSql.match(/create table public\.x_oauth_connections \([\s\S]*?\n\);/)?.[0] ?? "";
 const oauthStatesTableSql = schemaSql.match(/create table public\.oauth_states \([\s\S]*?\n\);/)?.[0] ?? "";
+const adminMembersTableSql =
+  schemaSql.match(/create table public\.admin_members \([\s\S]*?\n\);/)?.[0] ?? "";
+const adminMembershipEventsTableSql =
+  schemaSql.match(/create table public\.admin_membership_events \([\s\S]*?\n\);/)?.[0] ?? "";
+const safeAdminMemberUpdateFunctionSql =
+  schemaSql.match(/create or replace function public\.update_admin_member_safely\([\s\S]*?\n\$\$;/)?.[0] ??
+  "";
+const bootstrapAdminOwnerFunctionSql =
+  schemaSql.match(/create or replace function public\.bootstrap_admin_owner\([\s\S]*?\n\$\$;/)?.[0] ??
+  "";
 const contentComplianceEventsTableSql =
   schemaSql.match(/create table public\.content_compliance_events \([\s\S]*?\n\);/)?.[0] ?? "";
 const mediaTableSql = schemaSql.match(/create table public\.media \([\s\S]*?\n\);/)?.[0] ?? "";
@@ -36,6 +46,67 @@ const ownMediaPolicySql =
   "";
 
 describe("Supabase schema contract", () => {
+  it("keeps admin membership and audit data service-role only", () => {
+    expect(schemaSql).toContain("create type public.admin_role as enum ('owner', 'operator', 'viewer');");
+    expect(schemaSql).toContain(
+      "create type public.admin_member_status as enum ('invited', 'active', 'disabled');",
+    );
+    expect(adminMembersTableSql).toContain("user_id uuid unique references auth.users(id) on delete set null");
+    expect(adminMembersTableSql).toContain("email text not null unique check (email = lower(btrim(email)))");
+    expect(adminMembersTableSql).toContain("role public.admin_role not null");
+    expect(adminMembersTableSql).toContain(
+      "status public.admin_member_status not null default 'invited'",
+    );
+    expect(adminMembershipEventsTableSql).toContain(
+      "member_id uuid not null references public.admin_members(id) on delete cascade",
+    );
+    expect(adminMembershipEventsTableSql).toContain(
+      "event_type public.admin_membership_event_type not null",
+    );
+
+    for (const table of ["admin_members", "admin_membership_events"]) {
+      expect(schemaSql).toContain(`alter table public.${table} enable row level security;`);
+      expect(schemaSql).toContain(
+        `revoke all on table public.${table} from public, anon, authenticated;`,
+      );
+      expect(schemaSql).toContain(`grant all on table public.${table} to service_role;`);
+      expect(schemaSql).not.toMatch(new RegExp(`create policy [\\s\\S]* on public\\.${table}`));
+    }
+  });
+
+  it("serializes owner changes and writes membership audit events in the same transaction", () => {
+    expect(safeAdminMemberUpdateFunctionSql).toContain(
+      "pg_advisory_xact_lock(hashtextextended('xguard_admin_member_guard', 0))",
+    );
+    expect(safeAdminMemberUpdateFunctionSql).toContain("admin_member_cannot_disable_self");
+    expect(safeAdminMemberUpdateFunctionSql).toContain("admin_last_owner_required");
+    expect(safeAdminMemberUpdateFunctionSql).toContain("admin_member_activation_requires_login");
+    expect(safeAdminMemberUpdateFunctionSql).toContain(
+      "insert into public.admin_membership_events",
+    );
+    expect(schemaSql).toContain(
+      "revoke all on function public.update_admin_member_safely(",
+    );
+    expect(schemaSql).toContain(
+      "grant execute on function public.update_admin_member_safely(",
+    );
+  });
+
+  it("makes the first-owner bootstrap one-time and atomic", () => {
+    expect(bootstrapAdminOwnerFunctionSql).toContain(
+      "pg_advisory_xact_lock(hashtextextended('xguard_admin_bootstrap_guard', 0))",
+    );
+    expect(bootstrapAdminOwnerFunctionSql).toContain(
+      "if exists (select 1 from public.admin_members)",
+    );
+    expect(bootstrapAdminOwnerFunctionSql).toContain("admin_bootstrap_already_completed");
+    expect(bootstrapAdminOwnerFunctionSql).toContain(
+      "insert into public.admin_membership_events",
+    );
+    expect(schemaSql).toContain("revoke all on function public.bootstrap_admin_owner(");
+    expect(schemaSql).toContain("grant execute on function public.bootstrap_admin_owner(");
+  });
+
   it("requires x_account_id when usage is attached to a backup run", () => {
     expect(usageLedgerFunctionSql).toContain("returns public.api_usage_events");
     expect(usageLedgerFunctionSql).toContain("p_backup_run_id uuid");

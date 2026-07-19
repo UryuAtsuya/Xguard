@@ -21,6 +21,8 @@ const productionConfirmations = {
   COMPLIANCE_CONFIRMED: "true",
   OAUTH_STATE_REPOSITORY: "memory",
   CONTENT_COMPLIANCE_EVENT_REPOSITORY: "memory",
+  ADMIN_AUTH_MODE: "supabase",
+  ADMIN_REDIRECT_URL: "https://admin.xguard.example.com/auth/callback",
 };
 
 describe("XGuard API prototype", () => {

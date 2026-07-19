@@ -1,7 +1,10 @@
 import cors, { type CorsOptions } from "cors";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 import { z } from "zod";
+import type { AdminRole } from "../../shared/admin.js";
 import { MockXApiClient } from "./clients/xApiClient.js";
 import { createRuntimeConfig, type RuntimeConfig } from "./config/runtimeConfig.js";
 import { fixtureAccount, fixtureProfile, fixtureTweets } from "./fixtures/mockXData.js";
@@ -28,7 +31,23 @@ import {
   createDefaultXOAuthTokenExchangeService,
   type XOAuthTokenExchangeService,
 } from "./services/xOAuthTokenExchangeService.js";
-import type { AdminDatabaseSnapshot, AdminDatabaseTableSummary, ContentComplianceEvent } from "../../shared/types.js";
+import type { AdminDatabaseSnapshot, AdminDatabaseTableSummary } from "../../shared/types.js";
+import {
+  RejectingAdminTokenVerifier,
+  type AdminTokenVerifier,
+  type VerifiedAdminIdentity,
+} from "./admin/adminAuth.js";
+import {
+  InMemoryAdminMemberRepository,
+  type AdminMemberRepository,
+  type StoredAdminMember,
+  toPublicAdminMember,
+} from "./admin/adminMemberRepository.js";
+import {
+  UnavailableAdminInviteService,
+  type AdminInviteService,
+} from "./admin/adminInviteService.js";
+import { AdminService, AdminServiceError } from "./admin/adminService.js";
 
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
@@ -108,19 +127,32 @@ export interface CreateAppOptions {
   oauthStateRepository?: OAuthStateRepository;
   proofPageStore?: SupabaseProofPageStore;
   contentComplianceEventStore?: SupabaseContentComplianceEventStore;
+  adminTokenVerifier?: AdminTokenVerifier;
+  adminMemberRepository?: AdminMemberRepository;
+  adminInviteService?: AdminInviteService;
 }
 
-export function buildCorsOptions(config: RuntimeConfig = createRuntimeConfig()): CorsOptions {
-  if (!config.corsAllowedOrigins) {
+export function buildCorsOptions(
+  config: RuntimeConfig = createRuntimeConfig(),
+  audience: "customer" | "admin" = "customer",
+): CorsOptions {
+  const configuredOrigins =
+    audience === "admin"
+      ? config.adminCorsAllowedOrigins
+      : config.customerCorsAllowedOrigins ?? config.corsAllowedOrigins;
+
+  if (!configuredOrigins) {
     return {};
   }
 
-  const allowedOrigins = new Set(config.corsAllowedOrigins);
+  const allowedOrigins = new Set(configuredOrigins);
 
   return {
     origin(origin, callback) {
       callback(null, !origin || allowedOrigins.has(origin));
     },
+    methods: ["GET", "POST", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Authorization", "Content-Type"],
   };
 }
 
@@ -135,13 +167,34 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   const usageLedger = createInMemoryApiUsageLedgerService();
   const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const proofPageRepository = createProofPageRepository(config, options);
+  const adminMemberRepository = options.adminMemberRepository ?? new InMemoryAdminMemberRepository();
+  const adminService = new AdminService(
+    adminMemberRepository,
+    options.adminInviteService ?? new UnavailableAdminInviteService(),
+  );
+  const adminTokenVerifier = options.adminTokenVerifier ?? new RejectingAdminTokenVerifier();
+  const requireAdminSession = requireAdmin(adminTokenVerifier, adminService, sessionRepository);
+  const customerCors = cors(buildCorsOptions(config, "customer"));
+  const adminCors = cors(buildCorsOptions(config, "admin"));
+  const invitationRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  });
 
-  app.use(cors(buildCorsOptions(config)));
-  app.use(express.json());
+  app.disable("x-powered-by");
+  app.use(helmet());
+  app.use((request, response, next) => {
+    const corsMiddleware = request.path.startsWith("/api/admin") ? adminCors : customerCors;
+    corsMiddleware(request, response, next);
+  });
+  app.use(express.json({ limit: "32kb" }));
   app.locals.sessionRepository = sessionRepository;
   app.locals.tokenRepository = tokenRepository;
   app.locals.proofPageRepository = proofPageRepository;
   app.locals.contentComplianceEventRepository = contentComplianceEventRepository;
+  app.locals.adminMemberRepository = adminMemberRepository;
 
   app.get("/health", (_request, response) => {
     response.json({
@@ -255,9 +308,104 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     response.json(entry.backupRun);
   });
 
-  app.get("/api/admin/database-snapshot", requireAuth(sessionRepository), async (request, response) => {
+  app.get("/api/admin/session", requireAdminSession, (request, response) => {
     response.set("Cache-Control", "no-store");
-    response.json(await buildAdminDatabaseSnapshot(getAuthenticatedUserId(request), proofPageRepository, contentComplianceEventRepository));
+    response.json({ member: toPublicAdminMember(getAdminMember(request)) });
+  });
+
+  app.get(
+    "/api/admin/members",
+    requireAdminSession,
+    requireAdminRole("owner"),
+    async (_request, response) => {
+      response.set("Cache-Control", "no-store");
+      const members = await adminService.listMembers();
+      response.json({ members: members.map(toPublicAdminMember) });
+    },
+  );
+
+  app.post(
+    "/api/admin/members/invitations",
+    invitationRateLimit,
+    requireAdminSession,
+    requireAdminRole("owner"),
+    async (request, response) => {
+      const body = z
+        .object({
+          email: z.string().trim().email().max(254),
+          role: z.enum(["owner", "operator", "viewer"]),
+        })
+        .strict()
+        .safeParse(request.body ?? {});
+
+      if (!body.success) {
+        response.status(400).json({
+          error: "invalid_admin_invitation",
+          details: body.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      try {
+        const member = await adminService.inviteMember({
+          actor: getAdminMember(request),
+          email: body.data.email,
+          role: body.data.role,
+          redirectTo:
+            config.adminAuth?.mode === "supabase"
+              ? config.adminAuth.redirectUrl
+              : "http://localhost:5174/auth/callback",
+        });
+        response.set("Cache-Control", "no-store");
+        response.status(202).json({ member: toPublicAdminMember(member) });
+      } catch (error) {
+        respondAdminError(error, response);
+      }
+    },
+  );
+
+  app.patch(
+    "/api/admin/members/:memberId",
+    requireAdminSession,
+    requireAdminRole("owner"),
+    async (request, response) => {
+      const body = z
+        .object({
+          role: z.enum(["owner", "operator", "viewer"]).optional(),
+          status: z.enum(["active", "disabled"]).optional(),
+        })
+        .strict()
+        .refine((value) => Boolean(value.role || value.status), {
+          message: "role_or_status_required",
+        })
+        .safeParse(request.body ?? {});
+
+      if (!body.success) {
+        response.status(400).json({
+          error: "invalid_admin_member_update",
+          details: body.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      try {
+        const member = await adminService.updateMember({
+          actor: getAdminMember(request),
+          memberId: getStringParam(request, "memberId"),
+          role: body.data.role,
+          status: body.data.status,
+        });
+        response.set("Cache-Control", "no-store");
+        response.json({ member: toPublicAdminMember(member) });
+      } catch (error) {
+        respondAdminError(error, response);
+      }
+    },
+  );
+
+  app.get("/api/admin/database-snapshot", requireAdminSession, async (_request, response) => {
+    response.set("Cache-Control", "no-store");
+    response.json(await buildAdminDatabaseSnapshot(proofPageRepository, contentComplianceEventRepository));
   });
 
   app.patch("/api/recovery/:runId/proof/visibility", requireAuth(sessionRepository), async (request, response) => {
@@ -352,6 +500,19 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     response.json(entry.proofPayload);
   });
 
+  app.use((_request, response) => {
+    response.status(404).json({ error: "not_found" });
+  });
+
+  app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+    if (response.headersSent) {
+      return;
+    }
+
+    console.error("xguard_request_failed", error instanceof Error ? error.message : "unknown");
+    response.status(500).json({ error: "internal_server_error" });
+  });
+
   return app;
 }
 
@@ -398,15 +559,11 @@ function createProofPageRepository(
 }
 
 async function buildAdminDatabaseSnapshot(
-  userId: string,
   proofPageRepository: ProofPageRepository,
   contentComplianceEventRepository: ContentComplianceEventRepository,
 ): Promise<AdminDatabaseSnapshot> {
-  const proofEntries = await proofPageRepository.listByUser(userId);
-  const xAccountIds = [...new Set(proofEntries.map((entry) => entry.backupRun.xAccountId))];
-  const contentComplianceEvents = (
-    await Promise.all(xAccountIds.map((xAccountId) => contentComplianceEventRepository.listByXAccount(xAccountId)))
-  ).flat();
+  const proofEntries = await proofPageRepository.listAll();
+  const contentComplianceEvents = await contentComplianceEventRepository.listAll();
   const backupRuns = proofEntries.map((entry) => entry.backupRun);
   const proofPages = proofEntries.map((entry) => ({
     runId: entry.backupRun.id,
@@ -447,6 +604,96 @@ function tableSummary(
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
+}
+
+interface AdminAuthenticatedRequest extends Request {
+  adminIdentity?: VerifiedAdminIdentity;
+  adminMember?: StoredAdminMember;
+}
+
+function requireAdmin(
+  adminTokenVerifier: AdminTokenVerifier,
+  adminService: AdminService,
+  customerSessionRepository: InMemorySessionRepository,
+) {
+  return async (
+    request: AdminAuthenticatedRequest,
+    response: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    const authorization = request.get("Authorization");
+    const token = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : undefined;
+
+    if (!token) {
+      response.status(401).json({ error: "admin_authentication_required" });
+      return;
+    }
+
+    try {
+      const identity = await adminTokenVerifier.verify(token);
+
+      if (!identity) {
+        if (await customerSessionRepository.lookup(token)) {
+          response.status(403).json({ error: "customer_session_not_allowed" });
+          return;
+        }
+
+        response.status(401).json({ error: "invalid_admin_token" });
+        return;
+      }
+
+      const member = await adminService.resolveSession(identity);
+      request.adminIdentity = identity;
+      request.adminMember = member;
+      next();
+    } catch (error) {
+      if (error instanceof AdminServiceError) {
+        response.status(error.statusCode).json({ error: error.code });
+        return;
+      }
+
+      next(error);
+    }
+  };
+}
+
+function requireAdminRole(...allowedRoles: AdminRole[]) {
+  const allowed = new Set(allowedRoles);
+
+  return (request: AdminAuthenticatedRequest, response: Response, next: NextFunction): void => {
+    const member = request.adminMember;
+
+    if (!member) {
+      response.status(401).json({ error: "admin_authentication_required" });
+      return;
+    }
+
+    if (!allowed.has(member.role)) {
+      response.status(403).json({ error: "admin_role_required" });
+      return;
+    }
+
+    next();
+  };
+}
+
+function getAdminMember(request: Request): StoredAdminMember {
+  const member = (request as AdminAuthenticatedRequest).adminMember;
+
+  if (!member) {
+    throw new Error("authenticated_admin_missing");
+  }
+
+  return member;
+}
+
+function respondAdminError(error: unknown, response: Response): void {
+  if (error instanceof AdminServiceError) {
+    response.status(error.statusCode).json({ error: error.code });
+    return;
+  }
+
+  throw error;
 }
 
 function requireAuth(sessionRepository: InMemorySessionRepository) {
