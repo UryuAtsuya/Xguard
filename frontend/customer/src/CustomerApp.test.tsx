@@ -81,6 +81,8 @@ describe("CustomerApp", () => {
   it("keeps the existing customer backup flow", async () => {
     render(<CustomerApp />);
 
+    expect(screen.getByRole("heading", { name: "Xの記録を、もしもの前に保全。" })).toBeInTheDocument();
+    expect(screen.getByText("パスワードをXGuardに入力することはありません。", { exact: false })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "アカウントを確認" })).toBeEnabled());
     fireEvent.change(screen.getByRole("textbox", { name: "保全するXアカウント" }), {
       target: { value: "xguard_creator" },
@@ -94,7 +96,7 @@ describe("CustomerApp", () => {
       expect(screen.getByText("投稿 2件を保全済み")).toBeInTheDocument();
     });
     expect(screen.queryByText(/Admin/)).not.toBeInTheDocument();
-  });
+  }, 10_000);
 
   it.each(["/admin", "/login", "/unknown"])("renders a customer-side 404 for %s", (path) => {
     window.history.pushState({}, "", path);

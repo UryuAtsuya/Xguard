@@ -22,9 +22,14 @@ export function CustomerApp() {
           <ShieldCheck aria-hidden="true" size={22} />
           <span>
             <strong>XGuard</strong>
-            <small>Account continuity</small>
+            <small>Account continuity for X</small>
           </span>
         </a>
+        <nav aria-label="ページ内メニュー">
+          <a href="#how-it-works">保全の流れ</a>
+          <a href="#safety">安全性</a>
+          <a href="#faq">よくある質問</a>
+        </nav>
       </header>
       <CustomerPortal />
     </main>

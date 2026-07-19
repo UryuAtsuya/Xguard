@@ -89,7 +89,9 @@ describe("AdminApp", () => {
       expect(fetchAdminSession).toHaveBeenCalledWith("admin-jwt");
       expect(fetchAdminDatabaseSnapshot).toHaveBeenCalledWith("admin-jwt");
     });
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "運用ダッシュボード" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "運用指標" })).toBeInTheDocument();
+    expect(screen.getByText("最近の保全処理")).toBeInTheDocument();
     expect(screen.getByText("backup_runs")).toBeInTheDocument();
   });
 
