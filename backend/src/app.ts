@@ -184,6 +184,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   });
 
   app.disable("x-powered-by");
+  app.enable("case sensitive routing");
   app.use(helmet());
   app.use((request, response, next) => {
     const corsMiddleware = request.path.startsWith("/api/admin") ? adminCors : customerCors;

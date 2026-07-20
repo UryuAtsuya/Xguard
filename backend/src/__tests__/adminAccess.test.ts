@@ -194,14 +194,18 @@ describe("admin API access boundary", () => {
 
   it("rejects disabled members and separates customer/admin CORS allowlists", async () => {
     const disabled = member("viewer", viewerUserId, "disabled@example.com", "disabled");
-    const repository = new InMemoryAdminMemberRepository([disabled]);
+    const owner = member("owner", ownerUserId);
+    const repository = new InMemoryAdminMemberRepository([disabled, owner]);
     const config = createRuntimeConfig({
       CUSTOMER_CORS_ORIGINS: "https://app.example.com",
       ADMIN_CORS_ORIGINS: "https://admin.example.com",
     });
     const app = createAdminApp(
       repository,
-      { disabled: { userId: viewerUserId, email: disabled.email } },
+      {
+        disabled: { userId: viewerUserId, email: disabled.email },
+        owner: { userId: ownerUserId, email: owner.email },
+      },
       undefined,
       config,
     );
@@ -218,11 +222,16 @@ describe("admin API access boundary", () => {
       .set("Origin", "https://app.example.com");
     const allowedCustomer = await request(app).get("/health").set("Origin", "https://app.example.com");
     const rejectedCustomer = await request(app).get("/health").set("Origin", "https://admin.example.com");
+    const mixedCaseAdmin = await request(app)
+      .get("/API/ADMIN/session")
+      .set("Origin", "https://app.example.com")
+      .set("Authorization", "Bearer owner");
 
     expect(allowedAdmin.headers["access-control-allow-origin"]).toBe("https://admin.example.com");
     expect(rejectedAdmin.headers["access-control-allow-origin"]).toBeUndefined();
     expect(allowedCustomer.headers["access-control-allow-origin"]).toBe("https://app.example.com");
     expect(rejectedCustomer.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(mixedCaseAdmin.status).toBe(404);
   });
 });
 
