@@ -81,13 +81,13 @@ describe("CustomerApp", () => {
   it("keeps the existing customer backup flow", async () => {
     render(<CustomerApp />);
 
-    expect(screen.getByRole("heading", { name: "Xの記録を、もしもの前に保全。" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "積み上げた発信を、もしもの後にも。" })).toBeInTheDocument();
     expect(screen.getByText("パスワードをXGuardに入力することはありません。", { exact: false })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "アカウントを確認" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Xアカウントを確認" })).toBeEnabled());
     fireEvent.change(screen.getByRole("textbox", { name: "保全するXアカウント" }), {
       target: { value: "xguard_creator" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "アカウントを確認" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xアカウントを確認" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "保全を開始" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "保全を開始" }));
 

@@ -4,6 +4,7 @@ import {
   DatabaseBackup,
   Eye,
   FileCheck2,
+  Fingerprint,
   KeyRound,
   LockKeyhole,
   ShieldCheck,
@@ -98,117 +99,112 @@ export function CustomerPortal() {
 
   return (
     <section className="customer-portal" aria-label="お客様が見る画面">
-      <section className="customer-hero">
-        <div className="customer-hero-copy">
-          <p className="eyebrow">Account continuity for X</p>
+      <section className="customer-stage">
+        <div className="customer-story">
+          <p className="eyebrow">Private account archive</p>
           <h1>
-            Xの記録を、<span>もしもの前に保全。</span>
+            積み上げた発信を、<span>もしもの後にも。</span>
           </h1>
           <p className="hero-text">
-            プロフィールと直近の投稿を、安全な控えとして残します。
-            アカウントに何か起きる前に、復旧の準備を始められます。
+            プロフィールと直近の投稿を、公開せず静かに保全します。
+            アカウントに何か起きたときも、本人性と活動の履歴を確認できる状態にします。
           </p>
           <ul className="hero-assurances" aria-label="XGuardの接続方針">
             <li><Eye aria-hidden="true" size={17} /> 読み取り専用</li>
             <li><LockKeyhole aria-hidden="true" size={17} /> 初期状態は非公開</li>
             <li><ShieldCheck aria-hidden="true" size={17} /> 投稿・DM・フォロー操作なし</li>
           </ul>
+          <div className="story-note">
+            <Fingerprint aria-hidden="true" size={21} />
+            <p><strong>見せる範囲は、自分で決める。</strong><span>保全したデータは、公開操作をするまで外部から見えません。</span></p>
+          </div>
         </div>
 
-        {phase === "account" ? (
-          <form className="account-form" onSubmit={handleConnect} noValidate>
-            <div className="form-heading">
-              <span>STEP 1</span>
-              <h2>保全するアカウントを確認</h2>
+        <aside className="journey-card" aria-label="保全の手続き">
+          <div className="journey-card-header">
+            <div>
+              <p className="section-label">Setup</p>
+              <h2>保全の準備をはじめる</h2>
             </div>
-            <label htmlFor="x-username">Xのユーザー名</label>
-            <div className="username-field">
-              <span aria-hidden="true">@</span>
-              <input
-                id="x-username"
-                name="username"
-                aria-label="保全するXアカウント"
-                type="text"
-                inputMode="text"
-                autoComplete="username"
-                placeholder="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                disabled={isBusy}
-                aria-describedby="username-help"
-              />
-            </div>
-            <p id="username-help">本人確認のため、このあとXの認証画面へ進みます。</p>
-            <button className="primary-action" type="submit" disabled={isBusy || !health?.ok}>
-              <KeyRound aria-hidden="true" size={18} />
-              アカウントを確認
-            </button>
-            <div className="form-security">
-              <LockKeyhole aria-hidden="true" size={16} />
-              <span>Xの認証画面で本人確認します。パスワードをXGuardに入力することはありません。</span>
-            </div>
-          </form>
-        ) : phase === "backup" && connectedAccount ? (
-          <section className="account-form current-action" aria-labelledby="backup-action-title">
-            <div className="form-heading">
-              <span>STEP 2</span>
-              <h2 id="backup-action-title">データを保全</h2>
-            </div>
-            <div className="connected-account">
-              <Check aria-hidden="true" size={18} />
-              <div>
-                <strong>@{connectedAccount.username}</strong>
-                <span>本人確認済み</span>
+            <span className="privacy-badge"><LockKeyhole aria-hidden="true" size={14} /> 非公開</span>
+          </div>
+
+          <JourneyProgress phase={phase} />
+
+          {phase === "account" ? (
+            <form className="journey-action" onSubmit={handleConnect} noValidate>
+              <div className="form-heading">
+                <span>STEP 1</span>
+                <h3>保全するアカウントを確認</h3>
               </div>
-            </div>
-            <p>プロフィールと直近25件の投稿を、読み取り専用で保存します。</p>
-            <button className="primary-action" type="button" onClick={handleBackup} disabled={isBusy}>
-              <DatabaseBackup aria-hidden="true" size={18} />
-              保全を開始
-            </button>
-            <div className="form-security">
-              <Eye aria-hidden="true" size={16} />
-              <span>この処理で投稿・DM・フォロー操作が行われることはありません。</span>
-            </div>
-          </section>
-        ) : proof && backupRun ? (
-          <section className="account-form current-action" aria-labelledby="backup-complete-title">
-            <div className="form-heading success-heading">
-              <span>COMPLETE</span>
-              <h2 id="backup-complete-title">保全が完了しました</h2>
-            </div>
-            <ProofSummary proof={proof} backupRun={backupRun} />
-          </section>
-        ) : null}
+              <label htmlFor="x-username">Xのユーザー名</label>
+              <div className="username-field">
+                <span aria-hidden="true">@</span>
+                <input
+                  id="x-username"
+                  name="username"
+                  aria-label="保全するXアカウント"
+                  type="text"
+                  inputMode="text"
+                  autoComplete="username"
+                  placeholder="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  disabled={isBusy}
+                  aria-describedby="username-help"
+                />
+              </div>
+              <p id="username-help">このあとXの認証画面で本人確認します。</p>
+              <button className="primary-action" type="submit" disabled={isBusy || !health?.ok}>
+                <KeyRound aria-hidden="true" size={18} />
+                Xアカウントを確認
+              </button>
+            </form>
+          ) : phase === "backup" && connectedAccount ? (
+            <section className="journey-action current-action" aria-labelledby="backup-action-title">
+              <div className="form-heading">
+                <span>STEP 2</span>
+                <h3 id="backup-action-title">データを保全</h3>
+              </div>
+              <div className="connected-account">
+                <Check aria-hidden="true" size={18} />
+                <div><strong>@{connectedAccount.username}</strong><span>本人確認済み</span></div>
+              </div>
+              <p>プロフィールと直近25件の投稿を、読み取り専用で保存します。</p>
+              <button className="primary-action" type="button" onClick={handleBackup} disabled={isBusy}>
+                <DatabaseBackup aria-hidden="true" size={18} />
+                保全を開始
+              </button>
+            </section>
+          ) : proof && backupRun ? (
+            <section className="journey-action current-action" aria-labelledby="backup-complete-title">
+              <div className="form-heading success-heading">
+                <span>COMPLETE</span>
+                <h3 id="backup-complete-title">保全が完了しました</h3>
+              </div>
+              <ProofSummary proof={proof} backupRun={backupRun} />
+            </section>
+          ) : null}
+
+          <p className="journey-notice" aria-live="polite">{notice}</p>
+          <div className="form-security">
+            <LockKeyhole aria-hidden="true" size={16} />
+            <span>パスワードをXGuardに入力することはありません。</span>
+          </div>
+        </aside>
       </section>
 
-      <section className="continuity-panel" id="how-it-works" aria-labelledby="continuity-title">
-        <div className="continuity-summary" aria-live="polite">
-          <div className="status-icon" data-ready={phase === "ready"}>
-            <ShieldCheck aria-hidden="true" size={22} />
-          </div>
-          <div>
-            <p className="section-label">現在の状況</p>
-            <h2 id="continuity-title">{phaseLabel[phase]}</h2>
-            <p className="status-notice">{notice}</p>
-          </div>
-          <div className="status-details">
-            <InfoRow label="公開設定" value="非公開" />
-            <InfoRow label="接続権限" value="読み取り専用" />
-          </div>
+      <section className="archive-section" id="how-it-works" aria-labelledby="archive-title">
+        <div className="section-intro">
+          <p className="eyebrow">What stays with you</p>
+          <h2 id="archive-title">残すのは、活動を説明するための最低限。</h2>
+          <p>公開範囲を広げず、もしもの時に自分の活動を確認できる記録だけを保全します。</p>
         </div>
-
-        <ol className="customer-workflow" aria-label="保全の流れ">
-          <FlowStep number="1" title="アカウント確認" state={phase === "account" ? "current" : "complete"}>
-            <p>{connectedAccount ? `@${connectedAccount.username} の本人確認が完了しました。` : "ユーザー名を入力し、Xの認証画面で本人確認します。"}</p>
-          </FlowStep>
-          <FlowStep number="2" title="データを保全" state={phase === "backup" ? "current" : phase === "ready" ? "complete" : "pending"}>
-            <p>プロフィールと直近25件の投稿を読み取り専用で保存します。</p>
-          </FlowStep>
-          <FlowStep number="3" title="復旧に備える" state={phase === "ready" ? "complete" : "pending"}>
-            <p>{phase === "ready" ? "保全内容の概要を確認できる状態になりました。" : "保全後、復旧に使えるデータの概要を確認できます。"}</p>
-          </FlowStep>
-        </ol>
+        <div className="archive-grid">
+          <article><Fingerprint aria-hidden="true" size={22} /><span>01</span><h3>プロフィール</h3><p>表示名、ユーザー名、自己紹介など本人性を示す情報。</p></article>
+          <article><Archive aria-hidden="true" size={22} /><span>02</span><h3>直近の投稿</h3><p>活動の流れが分かる直近25件を読み取り専用で保存。</p></article>
+          <article><FileCheck2 aria-hidden="true" size={22} /><span>03</span><h3>証明ページ</h3><p>必要になった時だけ見せられる、初期非公開の確認ページ。</p></article>
+        </div>
       </section>
 
       <section className="safety-section" id="safety" aria-labelledby="safety-title">
@@ -260,28 +256,25 @@ export function CustomerPortal() {
   );
 }
 
-function FlowStep({
-  children,
-  number,
-  state,
-  title,
-}: {
-  children: React.ReactNode;
-  number: string;
-  state: "complete" | "current" | "pending";
-  title: string;
-}) {
+function JourneyProgress({ phase }: { phase: CustomerFlowPhase }) {
+  const states = phase === "account"
+    ? ["current", "pending", "pending"]
+    : phase === "backup"
+      ? ["complete", "current", "pending"]
+      : ["complete", "complete", "complete"];
+
   return (
-    <li className="flow-step" data-state={state}>
-      <div className="step-heading">
-        <span className="step-number">{state === "complete" ? <Check aria-label="完了" size={18} /> : number}</span>
-        <div>
-          <span className="step-state">{stepStateLabel[state]}</span>
-          <h3>{title}</h3>
-        </div>
-      </div>
-      {state === "pending" ? <p className="step-waiting">前のステップが完了すると進めます。</p> : <div className="step-body">{children}</div>}
-    </li>
+    <ol className="journey-progress" aria-label="保全の進行状況">
+      {["本人確認", "データ保全", "準備完了"].map((label, index) => {
+        const state = states[index];
+        return (
+          <li key={label} data-state={state} aria-current={state === "current" ? "step" : undefined}>
+            <span>{state === "complete" ? <Check aria-label="完了" size={14} /> : index + 1}</span>
+            <small>{label}</small>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -310,27 +303,6 @@ function ProofSummary({ proof, backupRun }: { proof: ProofPublicPayload; backupR
 function normalizeUsername(value: string) {
   return value.trim().replace(/^@/, "");
 }
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="info-row">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-const phaseLabel: Record<CustomerFlowPhase, string> = {
-  account: "アカウント確認前",
-  backup: "保全を開始できます",
-  ready: "保全済み",
-};
-
-const stepStateLabel = {
-  complete: "完了",
-  current: "現在のステップ",
-  pending: "待機中",
-} as const;
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
