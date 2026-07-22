@@ -8,6 +8,8 @@ const productionEnv = {
   X_CLIENT_SECRET: "super-secret-value",
   OAUTH_STATE_REPOSITORY: "memory",
   CONTENT_COMPLIANCE_EVENT_REPOSITORY: "memory",
+  ADMIN_AUTH_MODE: "supabase",
+  ADMIN_REDIRECT_URL: "https://admin.xguard.example.com/auth/callback",
 };
 
 describe("runtime confirmation gates", () => {
@@ -20,6 +22,41 @@ describe("runtime confirmation gates", () => {
 
     expect(config.pricingConfirmed).toBe(true);
     expect(config.complianceConfirmed).toBe(true);
+    expect(config.adminAuth).toEqual({
+      mode: "supabase",
+      redirectUrl: "https://admin.xguard.example.com/auth/callback",
+    });
+  });
+
+  it("requires Supabase admin auth and a secure admin redirect in production", () => {
+    const { ADMIN_AUTH_MODE: _mode, ADMIN_REDIRECT_URL: _redirect, ...withoutAdminAuth } = productionEnv;
+
+    expect(() =>
+      createRuntimeConfig({
+        ...withoutAdminAuth,
+        PRICING_CONFIRMED: "true",
+        COMPLIANCE_CONFIRMED: "true",
+      }),
+    ).toThrow("invalid_runtime_env:ADMIN_AUTH_MODE");
+
+    expect(() =>
+      createRuntimeConfig({
+        ...productionEnv,
+        ADMIN_REDIRECT_URL: "http://admin.xguard.example.com/auth/callback",
+        PRICING_CONFIRMED: "true",
+        COMPLIANCE_CONFIRMED: "true",
+      }),
+    ).toThrow("invalid_runtime_env:ADMIN_REDIRECT_URL");
+  });
+
+  it("parses customer and admin CORS allowlists independently", () => {
+    const config = createRuntimeConfig({
+      CUSTOMER_CORS_ORIGINS: "https://app.example.com/path",
+      ADMIN_CORS_ORIGINS: "https://admin.example.com/team",
+    });
+
+    expect(config.customerCorsAllowedOrigins).toEqual(["https://app.example.com"]);
+    expect(config.adminCorsAllowedOrigins).toEqual(["https://admin.example.com"]);
   });
 
   it("rejects production when pricing confirmation is missing or false", () => {

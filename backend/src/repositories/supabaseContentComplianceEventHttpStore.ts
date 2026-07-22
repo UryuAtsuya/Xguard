@@ -55,6 +55,18 @@ export class SupabaseContentComplianceEventHttpStore implements SupabaseContentC
     return parseRowsResponse(response, "list_content_compliance_events");
   }
 
+  async listAllContentComplianceEvents(): Promise<SupabaseContentComplianceEventRow[]> {
+    const url = new URL(this.endpoint);
+    url.searchParams.set("order", "created_at.desc");
+
+    const response = await this.fetchWithTimeout(url, {
+      method: "GET",
+      headers: this.headers(),
+    });
+
+    return parseRowsResponse(response, "list_all_content_compliance_events");
+  }
+
   private headers(): Record<string, string> {
     return {
       apikey: this.serviceRoleKey,

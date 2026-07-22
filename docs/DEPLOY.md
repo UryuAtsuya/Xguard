@@ -6,7 +6,8 @@
 
 | Runtime | Target | 補足 |
 |---|---|---|
-| Frontend | Vercel | 将来の Next.js 14 App Router app は `frontend/` 配下に置く |
+| Customer frontend | Sites | `frontend/customer/`を`app.<base-domain>`へ配信する |
+| Admin frontend | 別Sites project | `frontend/admin/`を`admin.<base-domain>`へ非公開から配信する |
 | Backend API | Railway | `backend/src/server.ts` から Express API を起動する |
 | Database/Auth | Supabase | Postgres、Auth、RLS、service-role backend access |
 | Billing | Stripe | Webhooks は `stripe_events.event_id` で idempotent にする |
@@ -23,7 +24,10 @@ X_CLIENT_SECRET=
 X_CALLBACK_URL=
 X_OAUTH_STATUS_EXPOSURE=disabled
 X_OAUTH_STATUS_DIAGNOSTIC_TOKEN=
-CORS_ORIGINS=
+CUSTOMER_CORS_ORIGINS=https://app.example.com
+ADMIN_CORS_ORIGINS=https://admin.example.com
+ADMIN_AUTH_MODE=supabase
+ADMIN_REDIRECT_URL=https://admin.example.com/auth/callback
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 APP_BASE_URL=
@@ -37,7 +41,9 @@ deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。
 
 有効かつheader token一致時の endpoint は `mode`、`exposure`、`callbackUrl`、`scopes`、`clientIdConfigured`、`clientSecretConfigured`、`writesEnabled`、`missingEnv` だけを返し、`X_CLIENT_ID` の値、`X_CLIENT_SECRET` の値、`X_OAUTH_STATUS_DIAGNOSTIC_TOKEN` の値、token material は返さない。exposureが無効、tokenが未設定、headerが未指定または不一致の場合は一律404 JSONを返し、すべてのresponseに `Cache-Control: no-store` を付ける。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、write/follow/DM scopes は追加しない。
 
-`CORS_ORIGINS` は browser からAPIへアクセスできる origin のallowlistで、複数指定する場合はcomma区切りにする。未設定かつ `NODE_ENV=production` の場合は `APP_BASE_URL` の origin だけを許可し、`APP_BASE_URL` も未設定ならcross-origin requestを許可しない。local/prototype環境では未設定時に既定の `cors` 挙動を維持する。
+`CUSTOMER_CORS_ORIGINS`と`ADMIN_CORS_ORIGINS`は別allowlistとして設定する。管理APIはadmin originだけ、顧客APIはcustomer originだけにCORS responseを返す。legacy `CORS_ORIGINS` はcustomer側のfallbackに限って残す。
+
+`ADMIN_AUTH_MODE=supabase`では、backendがSupabase JWKSとservice-role RESTを使う。`SUPABASE_SERVICE_ROLE_KEY`はbackendだけに置く。admin frontendには`VITE_SUPABASE_URL`と`VITE_SUPABASE_PUBLISHABLE_KEY`だけを設定し、Supabase Authのredirect allowlistへ`ADMIN_REDIRECT_URL`を登録する。
 
 ## Build And Start
 
@@ -48,6 +54,15 @@ node dist/backend/src/server.js
 ```
 
 `npm run build` は `tsconfig.build.json` を使い、tests を production output から除外する。deployment 前に `npm run check` を実行する。
+
+frontend Sites artifact:
+
+```bash
+npm run build:sites:customer
+npm run build:sites:admin
+```
+
+rolloutはschema/backend、非公開admin deploy、`npm run admin:bootstrap`、admin smoke、customer deploy、custom domain/DNS接続の順に行う。実domainが確定するまではhostnameを環境変数で管理する。
 
 ## Release Gates
 
