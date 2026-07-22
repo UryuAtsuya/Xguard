@@ -1,44 +1,63 @@
-# 画面独立化と保全データ設計
+# 顧客画面・管理画面のorigin分離
 
-## 概要
+更新日: 2026-07-19
 
-Issue #21 / #22 の最初の対応として、XGuard の frontend はお客様画面と管理画面を URL レベルで分離する。
+## 配置
 
-directory、state、API、CSS、test の target boundary は [frontend の画面境界とディレクトリ構造](./FRONTEND_DIRECTORY_STRUCTURE.md) を正本とする。
+| Audience | URL | Source | Build output | Sites project |
+|---|---|---|---|---|
+| customer | `https://app.<base-domain>` | `frontend/customer/` | `dist/frontend-customer/` | root `.openai/hosting.json` |
+| admin | `https://admin.<base-domain>` | `frontend/admin/` | `dist/frontend-admin/` | `sites/admin/.openai/hosting.json` |
 
-- お客様画面: `/`
-- 管理画面: `/admin`
+2つのVite applicationはentry、build、test、CSS、API clientを共有しない。共有できるのはroot `shared/` のDTOと、`frontend/shared/` のaudience非依存UI token/test setupだけである。
 
-お客様画面は、入力、状況確認、復旧の3動作だけを見せる。管理画面は内部DB、レビュー、保全状況、proof page の状態を扱う。
+customerには `/` の保全フローだけを配置する。Sites WorkerはSPA全体fallbackを行わないため、`/admin`、`/login`、未知pathはHTTP 404になる。customer buildに `/api/admin`、管理component、管理画面文言が入っていないことを `npm run check:bundle-separation` で検証する。
 
-## 設計・方針
+adminは `/login`、`/auth/callback`、`/`、`/team` だけをSPA routeとして許可する。検索エンジン向けにはHTML metaとWorker response headerの両方で`noindex`を指定する。customerへのlinkは置かない。
 
-- お客様画面から管理用DB snapshot、compliance events、内部レビューキューを見せない。
-- 管理画面は AdminLTE に近い sidebar + KPI + table summary の情報密度に寄せる。
-- お客様画面の入力は `@username` と read-only OAuth 接続を起点にする。
-- 復旧用に使う public proof page は redacted DTO のみを表示し、raw X API payload は公開しない。
-- backend / repository 境界の外へ token material を出さない。
+## 認証・認可
 
-## DBに保管する候補
+- Supabase Authのemail magic linkとPKCEを使う。
+- browser側はpublishable keyだけを使い、`shouldCreateUser: false`で未招待userの自動作成を止める。
+- access tokenはbrowserの`sessionStorage`に保存し、管理APIの`Authorization: Bearer`だけに利用する。
+- backendはSupabase JWKS、issuer、`authenticated` audience、有効期限を検証する。
+- backendはrequestごとに`admin_members`のemail、Supabase user ID、`active` status、roleを検証する。
+- `owner`はmember管理、`operator`と`viewer`はread-only snapshotを利用できる。
+- X OAuthで発行したcustomer session tokenは管理APIで403になる。
+- `admin_members`と`admin_membership_events`はRLSを有効にし、service-role以外のtable accessをrevokeする。
 
-必須候補:
+## 環境変数
 
-- X account: `x_user_id`, `username`, `display_name`, `profile_image_url`, `captured_at`
-- Posts: `tweet_id`, `text`, `created_at`, `captured_at`, `reply_count`, `retweet_count`, `like_count`
-- Media: `media_key`, `tweet_id`, `type`, `url_or_storage_key`, `width`, `height`, `duration_ms`, `captured_at`
-- Backup runs: `id`, `x_user_id`, `status`, `tweets_captured`, `started_at`, `completed_at`, `error_code`
-- Proof pages: `id`, `backup_run_id`, `public_slug`, `revoked_at`, `expires_at`, `created_at`
-- Recovery cases: `id`, `x_user_id`, `status`, `reason`, `opened_at`, `closed_at`
-- Compliance events: `id`, `event_type`, `subject_type`, `subject_id`, `created_at`, `metadata`
+hostnameは固定せず環境変数で指定する。
 
-注意点:
+Backend:
 
-- 投稿本文、画像、動画、日時は復旧証拠として必要だが、公開画面には redaction 済みの最小情報だけを出す。
-- 画像・動画は raw URL をそのまま公開せず、保存先 key と公開可否を分ける。
-- `offline.access` を使う場合でも refresh token は backend repository 境界の外に出さない。
+```env
+CUSTOMER_CORS_ORIGINS=https://app.example.com
+ADMIN_CORS_ORIGINS=https://admin.example.com
+ADMIN_AUTH_MODE=supabase
+ADMIN_REDIRECT_URL=https://admin.example.com/auth/callback
+SUPABASE_URL=https://project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
+```
 
-## 未解決
+Admin frontend:
 
-- 実 DB schema への `media` / `recovery_cases` 追加は別 slice。
-- 管理画面の認証・権限分離は別 slice。現時点の `/admin` は frontend route 分離であり、production の access control ではない。
-- お客様が `@username` のみで始める場合と OAuth 接続まで必須にする場合の product decision が必要。
+```env
+VITE_XGUARD_API_BASE_URL=https://api.example.com
+VITE_SUPABASE_URL=https://project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=
+VITE_ADMIN_REDIRECT_URL=https://admin.example.com/auth/callback
+```
+
+`SUPABASE_SERVICE_ROLE_KEY`はbackendとbootstrap scriptだけに置き、`VITE_*`には絶対に設定しない。Supabase Authのredirect allowlistにもadmin callback URLを登録する。
+
+## 初回ownerとrollout
+
+schema適用後、backend環境に`ADMIN_BOOTSTRAP_EMAIL`を一時的に設定し、次を一度だけ実行する。
+
+```bash
+npm run admin:bootstrap
+```
+
+scriptは既存memberがある場合に停止し、秘密情報やmagic linkを出力しない。rollout順はschema/backend、非公開admin deploy、owner bootstrap、admin smoke、customer deploy、custom domain/DNS接続とする。

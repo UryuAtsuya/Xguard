@@ -63,6 +63,10 @@ export class SupabaseProofPageHttpStore implements SupabaseProofPageStore {
     return this.fetchProofPages({ user_id: `eq.${userId}`, order: "created_at.desc" }, "list_proof_pages");
   }
 
+  async listAllProofPages(): Promise<SupabaseProofPageEntryRow[]> {
+    return this.fetchProofPages({ order: "created_at.desc" }, "list_all_proof_pages");
+  }
+
   async updateProofPageVisibility(input: {
     backup_run_id: string;
     visibility: SupabaseProofPageRow["visibility"];

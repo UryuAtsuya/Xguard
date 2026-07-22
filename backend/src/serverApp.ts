@@ -1,4 +1,7 @@
 import type { CreateAppOptions } from "./app.js";
+import { SupabaseAdminInviteService } from "./admin/adminInviteService.js";
+import { SupabaseAdminTokenVerifier } from "./admin/adminAuth.js";
+import { SupabaseAdminMemberHttpRepository } from "./admin/supabaseAdminMemberHttpRepository.js";
 import type { RuntimeConfig } from "./config/runtimeConfig.js";
 import { SupabaseContentComplianceEventHttpStore } from "./repositories/supabaseContentComplianceEventHttpStore.js";
 import { SupabaseOAuthStateHttpStore } from "./repositories/supabaseOAuthStateHttpStore.js";
@@ -8,7 +11,12 @@ export function createServerAppOptions(
   config: RuntimeConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): CreateAppOptions {
-  if (config.contentComplianceEventRepository === "memory" && config.oauthStateRepository === "memory") {
+  const adminAuthEnabled = config.adminAuth?.mode === "supabase";
+  if (
+    config.contentComplianceEventRepository === "memory" &&
+    config.oauthStateRepository === "memory" &&
+    !adminAuthEnabled
+  ) {
     return {};
   }
 
@@ -34,6 +42,16 @@ export function createServerAppOptions(
             supabaseUrl,
             serviceRoleKey,
           }),
+        }
+      : {}),
+    ...(adminAuthEnabled
+      ? {
+          adminTokenVerifier: new SupabaseAdminTokenVerifier(supabaseUrl),
+          adminMemberRepository: new SupabaseAdminMemberHttpRepository({
+            supabaseUrl,
+            serviceRoleKey,
+          }),
+          adminInviteService: new SupabaseAdminInviteService(supabaseUrl, serviceRoleKey),
         }
       : {}),
   };

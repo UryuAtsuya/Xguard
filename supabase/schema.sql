@@ -12,6 +12,9 @@ create type public.recovery_session_status as enum ('draft', 'proof_ready', 'new
 create type public.recovery_case_status as enum ('open', 'proof_ready', 'recovering', 'closed', 'canceled');
 create type public.health_check_reason as enum ('ok', 'not_found', 'forbidden', 'auth_failed', 'rate_limited', 'api_error', 'network_error', 'unknown');
 create type public.x_oauth_connection_status as enum ('active', 'auth_expired', 'revoked');
+create type public.admin_role as enum ('owner', 'operator', 'viewer');
+create type public.admin_member_status as enum ('invited', 'active', 'disabled');
+create type public.admin_membership_event_type as enum ('invited', 'invitation_resent', 'activated', 'role_changed', 'disabled', 'reactivated');
 
 create table public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -22,6 +25,26 @@ create table public.user_profiles (
   monthly_api_cost_limit_usd numeric(10, 4) not null default 10.0000,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table public.admin_members (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid unique references auth.users(id) on delete set null,
+  email text not null unique check (email = lower(btrim(email))),
+  role public.admin_role not null,
+  status public.admin_member_status not null default 'invited',
+  invited_by_user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.admin_membership_events (
+  id uuid primary key default gen_random_uuid(),
+  actor_user_id uuid references auth.users(id) on delete set null,
+  member_id uuid not null references public.admin_members(id) on delete cascade,
+  event_type public.admin_membership_event_type not null,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
 );
 
 create table public.x_accounts (
@@ -248,6 +271,8 @@ create table public.stripe_events (
 );
 
 create index x_accounts_user_id_idx on public.x_accounts(user_id);
+create index admin_members_status_role_idx on public.admin_members(status, role);
+create index admin_membership_events_member_id_created_at_idx on public.admin_membership_events(member_id, created_at desc);
 create index x_oauth_connections_x_account_id_idx on public.x_oauth_connections(x_account_id);
 create index oauth_states_expires_at_idx on public.oauth_states(expires_at);
 create index backup_runs_x_account_id_created_at_idx on public.backup_runs(x_account_id, created_at desc);
@@ -264,6 +289,8 @@ create index recovery_cases_user_id_opened_at_idx on public.recovery_cases(user_
 create index recovery_cases_x_account_id_opened_at_idx on public.recovery_cases(x_account_id, opened_at desc);
 
 alter table public.user_profiles enable row level security;
+alter table public.admin_members enable row level security;
+alter table public.admin_membership_events enable row level security;
 alter table public.x_accounts enable row level security;
 alter table public.x_oauth_connections enable row level security;
 alter table public.oauth_states enable row level security;
@@ -321,13 +348,220 @@ create policy "Users can read own manual notification queue" on public.manual_no
   )
 );
 
--- x_oauth_connections, oauth_states, and stripe_events are service-role only.
+-- admin_members, admin_membership_events, x_oauth_connections, oauth_states,
+-- and stripe_events are service-role only.
 -- Insert/update/delete are service-role only for v0.
 -- Do not expose token refs, raw X payload, service role keys, or Stripe raw payloads to the frontend.
 revoke all on table public.x_oauth_connections from public, anon, authenticated;
 grant all on table public.x_oauth_connections to service_role;
 revoke all on table public.oauth_states from public, anon, authenticated;
 grant all on table public.oauth_states to service_role;
+revoke all on table public.admin_members from public, anon, authenticated;
+grant all on table public.admin_members to service_role;
+revoke all on table public.admin_membership_events from public, anon, authenticated;
+grant all on table public.admin_membership_events to service_role;
+
+create or replace function public.bootstrap_admin_owner(
+  p_user_id uuid,
+  p_email text,
+  p_created_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  created_member public.admin_members%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('xguard_admin_bootstrap_guard', 0));
+
+  if exists (select 1 from public.admin_members) then
+    raise exception 'admin_bootstrap_already_completed' using errcode = 'P0001';
+  end if;
+
+  insert into public.admin_members (
+    user_id,
+    email,
+    role,
+    status,
+    invited_by_user_id,
+    created_at,
+    updated_at
+  ) values (
+    p_user_id,
+    lower(btrim(p_email)),
+    'owner',
+    'invited',
+    null,
+    coalesce(p_created_at, now()),
+    coalesce(p_created_at, now())
+  )
+  returning * into created_member;
+
+  insert into public.admin_membership_events (
+    actor_user_id,
+    member_id,
+    event_type,
+    details,
+    created_at
+  ) values (
+    null,
+    created_member.id,
+    'invited',
+    jsonb_build_object('bootstrap', true, 'role', 'owner'),
+    coalesce(p_created_at, now())
+  );
+
+  return to_jsonb(created_member);
+end;
+$$;
+
+revoke all on function public.bootstrap_admin_owner(
+  uuid,
+  text,
+  timestamptz
+) from public, anon, authenticated;
+
+grant execute on function public.bootstrap_admin_owner(
+  uuid,
+  text,
+  timestamptz
+) to service_role;
+
+create or replace function public.update_admin_member_safely(
+  p_actor_member_id uuid,
+  p_member_id uuid,
+  p_role public.admin_role,
+  p_status public.admin_member_status,
+  p_updated_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_member public.admin_members%rowtype;
+  target_member public.admin_members%rowtype;
+  updated_member public.admin_members%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('xguard_admin_member_guard', 0));
+
+  select * into actor_member
+    from public.admin_members
+    where id = p_actor_member_id
+    for update;
+
+  if not found
+    or actor_member.status <> 'active'
+    or actor_member.role <> 'owner'
+    or actor_member.user_id is null
+  then
+    raise exception 'admin_owner_required' using errcode = 'P0001';
+  end if;
+
+  select * into target_member
+    from public.admin_members
+    where id = p_member_id
+    for update;
+
+  if not found then
+    raise exception 'admin_member_not_found' using errcode = 'P0001';
+  end if;
+
+  if p_role is null and p_status is null then
+    raise exception 'admin_member_update_empty' using errcode = 'P0001';
+  end if;
+
+  if p_status = 'invited' then
+    raise exception 'admin_member_invalid_status' using errcode = 'P0001';
+  end if;
+
+  if target_member.id = actor_member.id and p_status = 'disabled' then
+    raise exception 'admin_member_cannot_disable_self' using errcode = 'P0001';
+  end if;
+
+  if p_status = 'active' and target_member.user_id is null then
+    raise exception 'admin_member_activation_requires_login' using errcode = 'P0001';
+  end if;
+
+  if target_member.role = 'owner'
+    and target_member.status = 'active'
+    and (
+      (p_role is not null and p_role <> 'owner')
+      or p_status = 'disabled'
+    )
+    and (
+      select count(*)
+      from public.admin_members
+      where role = 'owner' and status = 'active'
+    ) <= 1
+  then
+    raise exception 'admin_last_owner_required' using errcode = 'P0001';
+  end if;
+
+  update public.admin_members
+    set role = coalesce(p_role, target_member.role),
+        status = coalesce(p_status, target_member.status),
+        updated_at = coalesce(p_updated_at, now())
+    where id = target_member.id
+    returning * into updated_member;
+
+  if p_role is not null and p_role <> target_member.role then
+    insert into public.admin_membership_events (
+      actor_user_id,
+      member_id,
+      event_type,
+      details,
+      created_at
+    ) values (
+      actor_member.user_id,
+      target_member.id,
+      'role_changed',
+      jsonb_build_object('from', target_member.role, 'to', p_role),
+      coalesce(p_updated_at, now())
+    );
+  end if;
+
+  if p_status is not null and p_status <> target_member.status then
+    insert into public.admin_membership_events (
+      actor_user_id,
+      member_id,
+      event_type,
+      details,
+      created_at
+    ) values (
+      actor_member.user_id,
+      target_member.id,
+      case when p_status = 'disabled'
+        then 'disabled'::public.admin_membership_event_type
+        else 'reactivated'::public.admin_membership_event_type
+      end,
+      jsonb_build_object('from', target_member.status, 'to', p_status),
+      coalesce(p_updated_at, now())
+    );
+  end if;
+
+  return to_jsonb(updated_member);
+end;
+$$;
+
+revoke all on function public.update_admin_member_safely(
+  uuid,
+  uuid,
+  public.admin_role,
+  public.admin_member_status,
+  timestamptz
+) from public, anon, authenticated;
+
+grant execute on function public.update_admin_member_safely(
+  uuid,
+  uuid,
+  public.admin_role,
+  public.admin_member_status,
+  timestamptz
+) to service_role;
 
 create or replace function public.validate_media_owner_consistency()
 returns trigger

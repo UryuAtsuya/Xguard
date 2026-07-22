@@ -9,6 +9,7 @@ export type NewContentComplianceEvent = Omit<ContentComplianceEvent, "id" | "cre
 export interface ContentComplianceEventRepository {
   record(event: NewContentComplianceEvent): Promise<ContentComplianceEvent>;
   listByXAccount(xAccountId: string): Promise<ContentComplianceEvent[]>;
+  listAll(): Promise<ContentComplianceEvent[]>;
 }
 
 export class InMemoryContentComplianceEventRepository implements ContentComplianceEventRepository {
@@ -28,6 +29,12 @@ export class InMemoryContentComplianceEventRepository implements ContentComplian
   async listByXAccount(xAccountId: string): Promise<ContentComplianceEvent[]> {
     return [...this.events.values()]
       .filter((event) => event.xAccountId === xAccountId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .map(cloneEvent);
+  }
+
+  async listAll(): Promise<ContentComplianceEvent[]> {
+    return [...this.events.values()]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .map(cloneEvent);
   }

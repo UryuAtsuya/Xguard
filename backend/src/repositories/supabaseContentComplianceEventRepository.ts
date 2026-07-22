@@ -23,6 +23,7 @@ export interface SupabaseContentComplianceEventStore {
     created_at?: string;
   }): Promise<SupabaseContentComplianceEventRow>;
   listContentComplianceEventsByXAccount(xAccountId: string): Promise<SupabaseContentComplianceEventRow[]>;
+  listAllContentComplianceEvents(): Promise<SupabaseContentComplianceEventRow[]>;
 }
 
 export class SupabaseContentComplianceEventRepository implements ContentComplianceEventRepository {
@@ -46,6 +47,11 @@ export class SupabaseContentComplianceEventRepository implements ContentComplian
 
   async listByXAccount(xAccountId: string): Promise<ContentComplianceEvent[]> {
     const rows = await this.store.listContentComplianceEventsByXAccount(xAccountId);
+    return rows.map(rowToEvent);
+  }
+
+  async listAll(): Promise<ContentComplianceEvent[]> {
+    const rows = await this.store.listAllContentComplianceEvents();
     return rows.map(rowToEvent);
   }
 }
