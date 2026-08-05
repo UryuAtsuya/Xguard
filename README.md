@@ -1,110 +1,137 @@
 # XGuard
 
-XGuardは、Xアカウント向けのread-firstな再起動準備サービスです。
+XGuardは、Xアカウントのプロフィールと直近投稿をread-onlyで保全し、問題発生後の本人確認と手動再起動を支えるプロトタイプです。BANの自動解除や自動投稿を行うサービスではありません。
 
-v0の目的は、BANされたアカウントを自動復活させることではありません。ユーザー本人が許可したXデータを平常時に保存し、問題発生後に管理された証明ページを公開して、新しいアカウントで手動再起動しやすくすることです。
+## 現在地
 
-## 現在のスコープ
+- customerとadminは、同じrepository内の独立したVite + React applicationです。
+- customerはmock OAuthを使ったローカル保全フローまで確認できます。
+- adminはSupabase Authの招待済みemail magic linkとrole確認を前提にしています。
+- configured X OAuthの実token exchangeは未実装です。production callbackは安全のため`501`で停止します。
+- production deploy、実Supabase接続、実domainでのcustomer/admin分離確認は、コード・CI完了とは別の検証項目です。
 
-- ユーザー本人のXアカウントへのOAuth接続。
-- プロフィールと直近投稿のread-onlyバックアップ。
-- 保存済みデータから生成する公開用proof page DTO。
-- 削除済み、非公開、withheldコンテンツとユーザー削除依頼に対応するcompliance queue。
-- Stripe subscriptionとwebhook冪等性の設計。
+## 画面構成
 
-## v0で作らないもの
+| 対象 | Local URL | 許可route | 目的 | 実装 |
+|---|---|---|---|---|
+| customer | `http://localhost:5173` | `/` | Xアカウント確認、プロフィールと直近25投稿の保全、保全結果の確認 | `frontend/customer/` |
+| admin | `http://localhost:5174` | `/login`, `/auth/callback`, `/`, `/team` | magic link認証、運用snapshot確認、ownerによるmember管理 | `frontend/admin/` |
 
-- 自動DM。
-- 自動follow/unfollow。
-- BAN回避導線。
-- 生のX API payload公開。
-- follower listの一括公開。
-- 自動投稿。
-
-## ドキュメント
-
-- `docs/X_API_SCOPE.md`: 現在のX APIデータ範囲とポリシー境界。
-- `docs/IMPLEMENTATION_GATE.md`: product codeを書く前のチェックリスト。
-- `docs/API_SPEC.md`: 現在のbackend prototype routeと置き換え予定interface。
-- `docs/ARCHITECTURE.md`: backend-first architectureと安全境界。
-- `docs/API_COST_MODEL.md`: API usage eventとcost tracking contract。
-- `docs/COMPLIANCE.md`: proof page、削除、manual reviewのcompliance contract。
-- `docs/LOCAL_STATUS_CHECK.md`: ローカル起動、API smoke、Web確認、CI相当確認の手順。
-
-## プロトタイプコード
-
-最初のコードスパイクはbackend-firstです。
+customerとadminはentrypoint、CSS、API client、build output、testを共有しません。共有範囲はroot `shared/`のDTOと、`frontend/shared/`のaudience非依存token/test setupだけです。
 
 ```text
-backend/       Express API prototype、mock X client、token repository boundary
-frontend/      customer/adminを別entry・別bundleにした2つのVite + React app
-shared/        将来frontend/backendで共有するTypeScript DTO
-supabase/      auth profile、X backup、proof page、compliance、Stripe eventの初期schema
+frontend/
+├── customer/               # customer app
+│   └── src/
+│       ├── CustomerApp.tsx # `/`以外を404にするapp shell
+│       ├── CustomerPortal.tsx
+│       └── api.ts          # customer APIのみ
+├── admin/                  # admin app
+│   └── src/
+│       ├── AdminApp.tsx    # admin routeとrole別画面
+│       ├── auth.ts         # Supabase magic link / PKCE
+│       └── api.ts          # `/api/admin/*`のみ
+└── shared/                 # audience非依存の共通要素
 ```
 
-ローカル起動:
+productionではcustomerを`app.<base-domain>`、adminを`admin.<base-domain>`へ別originで配信します。customer側の`/admin`、`/login`、未知pathと、admin側の許可route以外は404です。詳細は`docs/AUDIENCE_SEPARATION.md`を参照してください。
+
+### customer `/`
+
+1. Xのusernameを入力し、OAuthを開始する。
+2. 確認できたアカウントと入力usernameが一致した場合だけ、プロフィールと直近25投稿を保全する。
+3. 完了後にbackup runと公開用proof DTOの要約を表示する。
+
+画面内には保全対象、安全性、FAQも表示します。mock modeではOAuth callbackをローカルで完了できますが、実X OAuth接続が完成したことは意味しません。
+
+### admin
+
+| Route | 画面の目的 |
+|---|---|
+| `/login` | 招待済みemailへmagic linkを送る |
+| `/auth/callback` | PKCE codeをsessionへ交換し、backendで`admin_members`を確認する |
+| `/` | backup run、proof page、compliance eventのread-only snapshotと要対応件数を確認する |
+| `/team` | `owner`だけがmemberを招待し、role/statusを管理する |
+
+`operator`と`viewer`はdashboardのread-only snapshotを利用でき、member管理は`owner`だけです。Supabase URLとpublishable keyがない状態ではadmin認証は動きません。`SUPABASE_SERVICE_ROLE_KEY`はbackend/bootstrap専用で、frontendへ設定しません。
+
+## ローカル起動
+
+CIはNode.js 22を使用します。初回は依存関係を固定してinstallします。
 
 ```bash
-npm install
-npm run dev:api
-npm run dev:web:customer
-npm run dev:web:admin
+npm ci
 ```
 
-検証:
+3つのterminalで起動します。
 
 ```bash
+npm run dev:api            # http://localhost:4000
+npm run dev:web:customer   # http://localhost:5173
+npm run dev:web:admin      # http://localhost:5174
+```
+
+`npm run dev:web`はcustomer起動のaliasです。customer/adminとも`/api`と`/health`をlocal backendへproxyします。
+
+customerのmock smokeは環境変数未設定でも実行できます。adminをブラウザ確認する場合は、少なくとも次のfrontend値と、対応するbackend/Supabase設定が必要です。
+
+```env
+VITE_SUPABASE_URL=https://project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=
+VITE_ADMIN_REDIRECT_URL=http://localhost:5174/auth/callback
+```
+
+backend/productionの環境変数とrollout順は`docs/DEPLOY.md`、mock API smokeの手順は`docs/LOCAL_STATUS_CHECK.md`を参照してください。
+
+## テスト・検証コマンド
+
+| 目的 | Command | 確認範囲 |
+|---|---|---|
+| customer test | `npm run test:web:customer` | customer component、保全フロー、404 |
+| admin test | `npm run test:web:admin` | magic link、callback、dashboard、team、404 |
+| customer build | `npm run build:web:customer` | `dist/frontend-customer/` |
+| admin build | `npm run build:web:admin` | `dist/frontend-admin/` |
+| bundle境界 | `npm run build:web && npm run check:bundle-separation` | customer bundleへのadmin情報混入と、その逆を検出 |
+| 全体gate | `npm run check` | frontend typecheck、API/customer/admin build、bundle境界、全Vitest |
+| Supabase integration前提 | `npm run check:supabase-integration-env` | integration flag、DB URL、`psql`、schemaの有無 |
+
+変更後の最小gateは次の順です。
+
+```bash
+git diff --check
 npm run check
 ```
 
-customerは `http://localhost:5173`、adminは `http://localhost:5174` で起動し、どちらも `/api` と `/health` を `http://localhost:4000` のbackendへproxyします。`dev:web` はcustomer起動のaliasです。
+画面を変更した場合は、全体gateに加えてcustomer/adminを別portで起動し、許可routeと404をブラウザで確認します。Supabase SQL integration testは実DB URLを必要とするため、通常のunit testとは分けて実施します。
 
-## 環境変数
+## 2026年8月にテスト段階を完了する最短ルート
 
-プロトタイプは未設定でもmock modeで起動します。実値を入れると、OAuth開始URLがconfigured modeに切り替わります。
+今すぐ行う最小の1手は、Node.js 22のclean install環境で`npm ci && npm run check`を安定してgreenにすることです。特定testの再実行だけが成功しても、全体gate成功まではbaseline完了と扱いません。
 
-```env
-PORT=4000
-APP_BASE_URL=http://localhost:4000
-CUSTOMER_CORS_ORIGINS=http://localhost:5173
-ADMIN_CORS_ORIGINS=http://localhost:5174
-ADMIN_AUTH_MODE=disabled
-ADMIN_REDIRECT_URL=http://localhost:5174/auth/callback
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-X_CLIENT_ID=
-X_CLIENT_SECRET=
-X_CALLBACK_URL=
-```
+baselineがgreenになった後は、機能追加を広げず次の順で確認します。
 
-- `X_CLIENT_ID`: mock modeからconfigured modeへ切り替える最小スイッチ。`NODE_ENV=production` では必須です。
-- `X_CALLBACK_URL`: 明示したcallback URL。未設定時は `APP_BASE_URL` またはlocal portから生成します。`NODE_ENV=production` ではHTTPSを必須とし、localhost/loopback callbackを拒否します。
-- `X_CLIENT_SECRET`: 現時点では検知のみ。token exchangeはまだ未実装です。`NODE_ENV=production` では必須で、configured callback では prototype token refs / session を発行せず、`501` で停止します。
-- `CUSTOMER_CORS_ORIGINS` / `ADMIN_CORS_ORIGINS`: customer APIとadmin APIのbrowser origin allowlist。productionでは別originを明示します。
-- `ADMIN_AUTH_MODE`: local mockでは`disabled`、productionでは`supabase`が必須です。
-- `ADMIN_REDIRECT_URL`: Supabase magic linkのadmin callback URLです。
-- `SUPABASE_SERVICE_ROLE_KEY`: backendと`npm run admin:bootstrap`専用です。frontendへ渡しません。
+1. customer mock smoke: `/`のアカウント確認、保全、完了表示と、`/admin`を含む未知pathの404。
+2. admin staging smoke: `/login`、`/auth/callback`、dashboard、ownerの`/team`、viewer/operatorの権限制限。
+3. 別origin smoke: customer/adminのCORS、adminの`noindex`、bundle境界、API権限分離。
+4. 結果をpass/failで記録し、失敗だけを小さなIssueにする。
 
-frontendのpublic build値と詳しい認証・配信境界は `docs/AUDIENCE_SEPARATION.md` を参照してください。
+この4項目が揃った状態を「テスト段階完了」とし、production準備は別判定にします。実X OAuth token exchange、実credential、DNS、deploy runtimeの確認が終わるまではproduction-readyと扱いません。
 
-## 正本
+## v0の安全境界
 
-計画と会社運用メモは以下で管理します。
+- OAuth scopeは`tweet.read`、`users.read`、`offline.access`だけにする。
+- 自動DM、自動follow/unfollow、自動投稿、BAN回避導線を作らない。
+- raw X API payloadやtoken materialをfrontend/public proof pageへ出さない。
+- service-role keyはbackendまたはbootstrapだけに置く。
 
-`/Users/uryuatsuya/Documents/ObsidianVault/MyLife/company/projects/x-ban-recovery-storage`
+## 関連ドキュメント
 
-## GitHub同期ルール
+- `docs/AUDIENCE_SEPARATION.md`: customer/adminのorigin、認証、認可、rollout境界。
+- `docs/FRONTEND_DIRECTORY_STRUCTURE.md`: frontendのimport/build/test境界。
+- `docs/LOCAL_STATUS_CHECK.md`: mock APIとlocal smoke手順。
+- `docs/DEPLOY.md`: environment、deploy順、release gate。
+- `docs/API_SPEC.md`: backend routeとinterface。
+- `docs/ARCHITECTURE.md`: backend-first architectureと安全境界。
+- `docs/COMPLIANCE.md`: proof page、削除、manual reviewのcontract。
 
-ブランチは次の役割で運用します。
-
-- `feature/*`: 個別の実装作業。
-- `develop`: staging環境へ反映する統合ブランチ。
-- `main`: production環境へ反映するリリースブランチ。
-
-通常の変更は `feature/*` から `develop` へpull requestを作成します。staging検証後、検証済みの同一commitを `develop` から `main` へpull requestで昇格します。実装変更を `main` へ直接pushしません。
-
-意味のある実装変更は、検証後に `UryuAtsuya/Xguard` の作業ブランチまたは `develop` へcommit/pushします。`origin` がない場合は以下を設定します。
-
-```bash
-git remote add origin https://github.com/UryuAtsuya/Xguard.git
-```
+計画と会社運用メモの正本は`/Users/uryuatsuya/Documents/ObsidianVault/MyLife/company/projects/x-ban-recovery-storage`です。通常の変更は`feature/*`から`develop`へpull requestを作成し、検証済みの同一commitだけを`develop`から`main`へ昇格します。
