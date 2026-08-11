@@ -106,7 +106,7 @@ Backendはpathが`/api/admin`で始まるrequestだけにadmin CORS allowlistを
 
 ## Verification Evidenceと未完了項目
 
-`origin/main`の`afa8f10a927e641764326758eac5d6c3a05ca1e4`では、Node.js 22 clean installの`npm ci && npm run check`と同一commitのGitHub Actionsが成功している。これはtypecheck、backend/customer/admin build、bundle separation、unit/component testのbaselineであり、production readinessの証明ではない。
+baseline commit `afa8f10a927e641764326758eac5d6c3a05ca1e4`では、Node.js 22 clean installの`npm ci && npm run check`と同一commitのGitHub Actionsが成功している。これはtypecheck、backend/customer/admin build、bundle separation、unit/component testのbaselineであり、production readinessの証明ではない。
 
 次の項目は未完了である。
 
