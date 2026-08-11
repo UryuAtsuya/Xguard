@@ -106,7 +106,7 @@ npm run check
 
 ## 2026年8月にテスト段階を完了する最短ルート
 
-今すぐ行う最小の1手は、Node.js 22のclean install環境で`npm ci && npm run check`を安定してgreenにすることです。特定testの再実行だけが成功しても、全体gate成功まではbaseline完了と扱いません。
+Node.js 22のclean install baselineは、`origin/main`の`afa8f10a927e641764326758eac5d6c3a05ca1e4`で`npm ci && npm run check`とGitHub Actionsの成功を確認済みです。次は実Supabase staging検証とlive X OAuthを独立して完了し、その後にstaging E2Eへ進みます。
 
 baselineがgreenになった後は、機能追加を広げず次の順で確認します。
 
