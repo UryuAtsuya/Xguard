@@ -1,61 +1,128 @@
 # XGuard Architecture
 
-作成日: 2026-05-25
+更新日: 2026-08-11
 
-## 現在の構成
+## サービス境界
 
-XGuard は read-only recovery preparation service である。implementation repo は product code を MyLife Vault の外に置き、prototype の関心事を次のように分ける。
+XGuardは、Xアカウントのprofileと直近投稿をread-onlyで保全し、問題発生後の本人確認と手動復旧を支えるprototypeである。自動解除、自動投稿、自動DM、follow/unfollow、ban回避は対象にしない。
+
+現在のrepositoryは、audienceごとに分離した2つのfrontend、Express backend、Supabase向けschema / repository boundaryで構成する。
+
+| Layer | 現在の実装 | Runtime上の状態 |
+|---|---|---|
+| Customer frontend | `frontend/customer/`の独立Vite app | `/`だけを許可し、customer APIだけを呼ぶ |
+| Admin frontend | `frontend/admin/`の独立Vite app | `/login`、`/auth/callback`、`/`、`/team`だけを許可する |
+| Backend API | `backend/src/app.ts`のExpress app | customer/admin APIを別CORS allowlistと別認証境界で提供する |
+| Database/Auth | `supabase/schema.sql`、Supabase Auth、service-role HTTP repository | 一部repositoryはruntime接続済み。実staging DBでの統合検証は未完了 |
+| X API | OAuth / API client interfaceとmock実装 | live token exchangeとlive X API readは未実装 |
+
+production想定ではcustomerを`app.<base-domain>`、adminを`admin.<base-domain>`へ別originで配信し、backend APIとSupabaseをfrontendから分離する。配置、route、bundleの詳細は`docs/AUDIENCE_SEPARATION.md`、環境変数とrollout順は`docs/DEPLOY.md`を正本とする。
+
+## Source Boundary
 
 ```text
-backend/   Express API、repository boundaries、backup/proof services、usage ledger
-shared/    frontend と backend で共有する DTOs
-docs/      implementation contracts と deployment notes
+frontend/
+├── customer/    customer entrypoint、UI、CSS、API client、test
+├── admin/       admin entrypoint、UI、CSS、API client、Auth、test
+└── shared/      audience非依存のstyle tokenとtest setup
+backend/
+└── src/
+    ├── admin/         Supabase Auth verification、member認可、招待
+    ├── clients/       X API client contractとmock client
+    ├── repositories/ memory / Supabase repository boundary
+    └── services/      backup、proof DTO、usage ledger、OAuth exchange boundary
+shared/          frontend/backendで共有するpublic DTO
+supabase/        schema、RLS、service-role-only table、transaction RPC
+sites/           customer/admin Sites Worker route boundary
+docs/            API、deploy、audience分離、complianceのcontract
 ```
 
-frontend と Supabase-backed persistence layer はまだ計画段階である。現在の backend prototype は意図的に fixture-backed にしており、live X API calls や paid usage を導入する前に API boundary を review できるようにしている。
+customerとadminはentrypoint、CSS、API client、build output、testを共有しない。共有範囲はroot `shared/`のDTOと`frontend/shared/`のaudience非依存要素に限定する。`npm run check:bundle-separation`が相互bundleへの管理API・画面文言の混入を検出する。
 
-## v0 Request Flow
+## Customer Request Flow
 
-1. user が最小 scope の `tweet.read`、`users.read`、`offline.access` で X OAuth を開始する。
-2. callback は token references だけを保存する。Raw token material は Supabase Vault または同等の KMS-backed table など、backend-only secret store に留める。
-3. backup run は user 自身の profile と recent posts を読む。
-4. backend は X API adapter call ごとに usage event を 1 件記録し、conservative cost と最新 rate-limit metadata を backup run に roll up する。
-5. real Supabase adapter は account snapshots、tweet snapshots、backup run status、API usage events を 1 つの transactional unit で書き込む必要がある。
-6. Proof pages は redacted public DTO から生成する。Raw X API payloads は公開しない。
-7. Compliance events は proof pages を revoke したり、deleted/protected/withheld content を removal 対象として mark できる。
+1. Customer frontendが`GET /api/x/oauth/start`を呼ぶ。
+2. BackendはPKCE `code_verifier`とstateを生成し、`OAuthStateRepository`へ有効期限付きで保存する。development既定はmemory、`OAUTH_STATE_REPOSITORY=supabase`ではservice-role経由で`oauth_states`を使う。
+3. `GET /api/x/oauth/callback`はstateを一度だけconsumeし、expired / invalid stateを拒否する。
+4. mock modeではprototype token referenceとcustomer sessionをin-memory repositoryへ保存する。configured production callbackはlive exchange未実装のため、tokenやsessionを発行せず`501`で停止する。
+5. `POST /api/backup/run`は現在`MockXApiClient`からfixtureの本人account、profile、recent postsを読み、in-memory usage ledgerへ計測結果を記録する。
+6. Backendはraw payloadではなくredacted public proof DTOを組み立てる。proof pageはmemory、または`CONTENT_COMPLIANCE_EVENT_REPOSITORY=supabase`時にSupabaseへ保存する。
+7. Customer sessionを持つ本人だけがbackup status、proof visibility、公開可能なproof DTOへアクセスできる。revoke時はcompliance eventも記録する。
+
+現時点のmock flow成功は、live X OAuth、live X API、tokenの永続保存、backup全体のtransactional persistenceが完成したことを意味しない。
+
+## Admin Request Flow
+
+1. Admin frontendはSupabase Authの招待済みemail magic linkとPKCEを使う。`shouldCreateUser: false`により未招待userを自動作成しない。
+2. `/auth/callback`でcodeをSupabase sessionへ交換し、access tokenをbrowserの`sessionStorage`に保持する。
+3. BackendはSupabase JWKS、issuer、`authenticated` audience、有効期限を検証する。
+4. 各admin requestで`admin_members`のemail、Supabase user ID、`active` status、roleをservice-role経由で確認する。
+5. `owner`だけがmember一覧、招待、role/status変更を実行できる。`operator`と`viewer`はdatabase snapshotをread-onlyで利用できる。
+6. X OAuthで作られたcustomer sessionはadmin APIで拒否する。
+
+`admin_members`と`admin_membership_events`はRLSを有効にし、`public`、`anon`、`authenticated`からのtable accessをrevokeしている。初回ownerはschema適用後に`npm run admin:bootstrap`で作成する。
+
+## Persistence Status
+
+| Concern | Schema / contract | Runtime接続 | 未完了境界 |
+|---|---|---|---|
+| OAuth state | `oauth_states`、single-use consume | memory / Supabaseを選択可能 | 実staging DB検証 |
+| Admin member / Auth | `admin_members`、membership events、Supabase Auth | Supabase JWKS / REST / inviteへ接続可能 | staging redirect、owner bootstrap、role smoke |
+| Proof page / compliance | `proof_pages`、`content_compliance_events`、visibility + event RPC | memory / Supabaseを選択可能 | 実DB transaction検証 |
+| API usage ledger | `backup_runs`、`api_usage_events`、monthly cost guard RPCとrepository | backup runtimeはin-memory | 実DB接続とbackup flowへの組み込み |
+| X token reference | `x_oauth_connections`と`SupabaseTokenRepository` contract | app runtimeはin-memory | live token exchange、backend-only secret store、refresh/revoke |
+| Account / snapshot | `x_accounts`、profile/tweet/media snapshot schema | backup runtimeはfixture | live X API adapterとtransactional persistence |
+| Customer session | repository contract | app runtimeはin-memory | staging向け永続session設計 |
+| Recovery data | `recovery_sessions`、`recovery_cases`、owner consistency constraint | API flow未接続 | staging integrationと運用flow |
+
+`supabase/schema.sql`は全主要tableでRLSを有効にし、owner consistency、proof revocation + compliance event、monthly API cost guardなどのconstraint / transaction RPCを定義する。ただしschema contract testの成功と、実Supabase stagingへのmigration・service-role・transaction検証は別の完了条件である。
+
+## API Boundary
+
+| Audience | Endpoint | Auth / purpose |
+|---|---|---|
+| customer | `GET /api/x/oauth/start` | PKCE/stateを開始する |
+| customer | `GET /api/x/oauth/callback` | stateをconsumeし、mock接続または安全な`501`を返す |
+| diagnostic | `GET /api/x/oauth/status` | 明示的に有効化した短期diagnostic tokenでのみ利用する |
+| customer | `POST /api/backup/run` | customer session必須。現在はmock backup |
+| customer | `GET /api/backup/status/:runId` | ownerだけがrunを参照する |
+| customer | `PATCH /api/recovery/:runId/proof/visibility` | ownerだけが公開範囲を変更する |
+| customer | `GET /api/recovery/:runId/proof` | private / revokedを公開せず、redacted DTOだけを返す |
+| admin | `GET /api/admin/session` | Supabase tokenとactive memberを確認する |
+| admin | `GET /api/admin/database-snapshot` | active admin member向けread-only snapshot |
+| admin owner | member list / invitation / update | `owner` roleだけに許可する |
+
+Backendはpathが`/api/admin`で始まるrequestだけにadmin CORS allowlistを使い、それ以外はcustomer allowlistを使う。service-role key、X secret、raw token、raw X payloadはfrontend/public DTOへ渡さない。
 
 ## Safety Boundaries
 
-- 自動 DM、follow/unfollow、posting、ban evasion workflow は作らない。
-- retention、privacy、cost が承認されるまで、v0 では `follows.read` を使わない。
-- Frontend code は token refs、raw tokens、service-role keys、raw Stripe payloads を受け取らない。
-- Account state transitions は、1 回の failed request から final ban status を断定せず、`connected`、`auth_expired`、`rate_limited`、`suspected_banned`、`banned`、`deleted`、`unknown` を使う。
+- X OAuth scopeは`tweet.read`、`users.read`、`offline.access`だけにする。
+- 自動DM、follow/unfollow、posting、ban evasion workflowを作らない。
+- raw X API payloadを公開せず、proof pageはredacted DTOから生成する。
+- token materialとservice-role keyをbackend-only boundaryに留める。
+- customer/adminをroute、bundle、CORS、認証、認可の各境界で分離する。
+- 1回のfailed requestからfinal ban statusを断定しない。
+- paid usageはmonthly cost guardを通し、無制限retryを行わない。
 
-## 次の実装境界
+## Verification Evidenceと未完了項目
 
-`InMemoryTokenRepository` を service-role store に支えられた `SupabaseTokenRepository` に置き換える。repository contract は次を support する必要がある。
+baseline commit `afa8f10a927e641764326758eac5d6c3a05ca1e4`では、Node.js 22 clean installの`npm ci && npm run check`と同一commitのGitHub Actionsが成功している。これはtypecheck、backend/customer/admin build、bundle separation、unit/component testのbaselineであり、production readinessの証明ではない。
 
-- OAuth callback 後に token references を保存する。
-- backend jobs 用に non-revoked token references を読む。
-- accounts を `auth_expired` に移す。
-- user deletion または disconnect 後に token rows を revoke する。
+次の項目は未完了である。
 
+- `supabase/schema.sql`の実staging適用、RLS、service-role、transaction integration test
+- X OAuth 2.0 Authorization Code + PKCEのlive token exchange
+- backend-only secret storeへのraw token保存とrefresh / revoke
+- `users.read` / `tweet.read`を使うlive X API adapterと本人username照合
+- customer/admin/backendのstaging deploy、別origin、CORS、redirect、role E2E
+- credential非露出、runtime log、search `noindex`、custom domain / DNSの実環境確認
 
-## 2026-05-26 Ledger 境界
+実装順は、Supabase staging検証（#44）とlive X OAuth（#45）を完了してから、staging deploy / E2E（#46）へ進む。CIがgreenでも、これらのruntime evidenceが揃うまではproduction-readyと扱わない。
 
-`ApiUsageLedgerService` は cost-aware backup runs の backend contract である。prototype は in-memory のままだが、production repository は次を行う Supabase transaction を使う必要がある。
+## 関連ドキュメント
 
-- X API calls の前に `backup_runs` row を作成する。
-- endpoint、resource count、conservative estimated cost、rate-limit headers 付きで `api_usage_events` を insert する。
-- すべての events を記録した後に backup run summary を update する。
-- `user_profiles.monthly_api_cost_limit_usd` を超える前に run を stop または mark する。
-
-## 2026-05-27 Ledger 検証
-
-usage ledger は repository write の前に service boundary で metering counts を validate する。Production Supabase code は、input を validate し、transactional rows を create または append し、その後 completed `backup_runs` summary を roll up する、という順序を維持する必要がある。Invalid negative、fractional、`NaN`、infinite counts は、`api_usage_events` や monthly cost guardrails に影響する前に fail させる。
-
-## 2026-05-28 Supabase Ledger Repository
-
-`SupabaseApiUsageLedgerRepository` は Supabase transaction store boundary を導入しながら service contract を安定させる。adapter は `backup_runs` を作成し、`api_usage_events` を insert し、rollup 用 events を list し、後で real service-role Supabase client が実装できる 1 つの interface 経由で summaries を update する。
-
-Usage events は insert 前に user の current monthly API cost status を確認する。Projected cost が `monthly_api_cost_limit_usd` を超える場合、adapter は event を persist する前に fail するため、backup workers は paid usage を無言で増やさずに run を stop または mark できる。
+- `README.md`: 現在地、local起動、日常の検証コマンド
+- `docs/AUDIENCE_SEPARATION.md`: customer/adminのorigin、route、bundle、Auth境界
+- `docs/DEPLOY.md`: environment、secret、deploy順、release gate
+- `docs/API_SPEC.md`: backend endpointとDTO contract
+- `docs/COMPLIANCE.md`: proof page、削除、manual review contract
