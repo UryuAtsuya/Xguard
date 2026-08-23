@@ -90,9 +90,11 @@ backend/productionの環境変数とrollout順は`docs/DEPLOY.md`、mock API smo
 | customer test | `npm run test:web:customer` | customer component、保全フロー、404 |
 | admin test | `npm run test:web:admin` | magic link、callback、dashboard、team、404 |
 | production依存audit | `npm run audit:production` | production依存の既知脆弱性がないこと |
+| backend container smoke | `npm run check:backend-container` | Node.js 22 image、non-root、read-only rootfs、persistent volume、`/health` |
 | customer build | `npm run build:web:customer` | `dist/frontend-customer/` |
 | admin build | `npm run build:web:admin` | `dist/frontend-admin/` |
 | bundle境界 | `npm run build:web && npm run check:bundle-separation` | customer bundleへのadmin情報混入と、その逆を検出 |
+| Sites artifact | `npm run build:sites:customer` / `npm run build:sites:admin` | public HTTPS API/Auth envのpreflight後に別artifactを生成 |
 | 全体gate | `npm run check` | frontend typecheck、API/customer/admin build、bundle境界、全Vitest |
 | Supabase integration前提 | `npm run check:supabase-integration-env` | integration flag、DB URL、`psql`、schemaの有無 |
 
@@ -101,6 +103,7 @@ backend/productionの環境変数とrollout順は`docs/DEPLOY.md`、mock API smo
 ```bash
 git diff --check
 npm run check
+npm run check:backend-container
 ```
 
 画面を変更した場合は、全体gateに加えてcustomer/adminを別portで起動し、許可routeと404をブラウザで確認します。Supabase SQL integration testは実DB URLを必要とするため、通常のunit testとは分けて実施します。

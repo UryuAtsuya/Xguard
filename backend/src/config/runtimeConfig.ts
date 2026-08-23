@@ -1,5 +1,6 @@
 export interface RuntimeConfig {
   nodeEnv: string;
+  appVersion?: string;
   port: number;
   pricingConfirmed: boolean;
   complianceConfirmed: boolean;
@@ -45,6 +46,7 @@ export type XOAuthRuntimeConfig =
 
 export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const nodeEnv = env.NODE_ENV?.trim() || "development";
+  const appVersion = parseAppVersion(env.APP_VERSION, env.RAILWAY_GIT_COMMIT_SHA);
   const pricingConfirmed = env.PRICING_CONFIRMED?.trim() === "true";
   const complianceConfirmed = env.COMPLIANCE_CONFIRMED?.trim() === "true";
 
@@ -114,6 +116,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
   if (!clientId) {
     return {
       nodeEnv,
+      appVersion,
       port,
       pricingConfirmed,
       complianceConfirmed,
@@ -141,6 +144,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
 
   return {
     nodeEnv,
+    appVersion,
     port,
     pricingConfirmed,
     complianceConfirmed,
@@ -234,6 +238,14 @@ function parsePositiveInteger(value: string | undefined, defaultValue: number, f
   }
 
   return parsed;
+}
+
+function parseAppVersion(explicitVersion: string | undefined, railwayCommitSha: string | undefined): string {
+  const value = explicitVersion?.trim() || railwayCommitSha?.trim() || "unknown";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value)) {
+    throw new Error("invalid_runtime_env:APP_VERSION");
+  }
+  return value;
 }
 
 function parseBoundedInteger(

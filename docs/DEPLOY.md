@@ -18,6 +18,7 @@
 ```env
 PORT=4000
 NODE_ENV=production
+APP_VERSION=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 X_CLIENT_ID=
@@ -39,6 +40,8 @@ APP_BASE_URL=
 
 `SUPABASE_SERVICE_ROLE_KEY`、X OAuth secrets、Stripe secrets、token encryption keys は backend または worker runtimes にのみ置く。
 
+`APP_VERSION`はrelease tagまたはcommit SHAを指定する。未設定時はRailwayの`RAILWAY_GIT_COMMIT_SHA`を使用し、`GET /health`の`version`で実行中commitを照合する。どちらもないlocal runtimeは`unknown`になる。
+
 `X_CLIENT_ID`はmockからconfigured OAuthへ切り替えるswitchである。configured serverは`X_CLIENT_SECRET`、`CUSTOMER_APP_URL`、`X_TOKEN_SECRET_STORE_DIR`、`X_TOKEN_ENCRYPTION_KEY`を必須にし、不足時は`invalid_runtime_env:<NAME>`で起動を停止する。`X_TOKEN_ENCRYPTION_KEY`は`openssl rand -base64 32`で生成した32 bytes keyとし、frontend、docs、commit、logへ残さない。rotationは既存token fileの復号を不能にするため、rotation時は全accountの再接続を計画する。
 
 `X_TOKEN_SECRET_STORE_DIR`はRailwayのpersistent volume上のbackend専用directoryへ向ける。directory / file permissionはそれぞれ`0700` / `0600`へ固定される。ephemeral filesystem、frontend volume、repository checkout配下は指定しない。access / refresh tokenはAES-256-GCMで保存され、APIとtoken repositoryには`xguard-secret://...` referenceだけが渡る。
@@ -59,6 +62,8 @@ deployment 診断が必要なときだけ `GET /api/x/oauth/status` を使う。
 
 ## Build And Start
 
+Railwayはrepository rootの`railway.json`により`Dockerfile` builderと`/health` gateを使う。backendは`PORT`を読み、`0.0.0.0`へbindする。imageはNode.js 22 multi-stage buildでproduction dependenciesとcompiled APIだけを含み、UID `10001`の`xguard` userで起動する。
+
 ```bash
 npm ci
 npm run build
@@ -67,12 +72,30 @@ node dist/backend/src/server.js
 
 `npm run build` は `tsconfig.build.json` を使い、tests を production output から除外する。deployment 前に `npm run check` を実行する。
 
+container contractのlocal / CI smoke:
+
+```bash
+npm run check:backend-container
+```
+
+このsmokeはimageをbuildし、read-only root filesystem、capability drop、non-root UID、production相当のfail-fast env、`/health`、writable volume mountを確認する。smoke用のenv値は外部serviceへ接続せず、実credentialを使用しない。
+
+Railwayではpersistent volumeを`/app/data`へmountし、`X_TOKEN_SECRET_STORE_DIR=/app/data/x-oauth-tokens`を設定する。volumeはbuild時やpre-deploy commandでは利用できないため、token fileをimage layerへ作成しない。新規deployment後は、再起動前後で同じencrypted token fileを復号できることをstaging gateとして確認する。
+
 frontend Sites artifact:
 
 ```bash
+VITE_XGUARD_API_BASE_URL=https://api.example.com \
 npm run build:sites:customer
+
+VITE_XGUARD_API_BASE_URL=https://api.example.com \
+VITE_SUPABASE_URL=https://project.supabase.co \
+VITE_SUPABASE_PUBLISHABLE_KEY=... \
+VITE_ADMIN_REDIRECT_URL=https://admin.example.com/auth/callback \
 npm run build:sites:admin
 ```
+
+両Sites buildはenvironment preflightを先に実行する。API / Supabase baseはpublic HTTPS originだけ、admin redirectは`/auth/callback`だけを許可する。値は検証outputへ表示しない。`VITE_SUPABASE_PUBLISHABLE_KEY`はpublic client用であり、`SUPABASE_SERVICE_ROLE_KEY`を渡すとbuildを拒否する。
 
 rolloutはschema/backend、非公開admin deploy、`npm run admin:bootstrap`、admin smoke、customer deploy、custom domain/DNS接続の順に行う。実domainが確定するまではhostnameを環境変数で管理する。
 
@@ -81,11 +104,13 @@ rolloutはschema/backend、非公開admin deploy、`npm run admin:bootstrap`、a
 - `git diff --check`
 - `npm run build`
 - `npm run check`
+- `npm run check:backend-container`
 - 実Supabase/Postgres migration test: `RUN_SUPABASE_SQL_INTEGRATION_TESTS=1 SUPABASE_DB_URL='postgresql://...' npx vitest run --configLoader runner backend/src/__tests__/supabaseSqlApiUsageLedger.integration.test.ts`
 - `npx vitest run --configLoader runner`
 - X OAuth scopes が `tweet.read`、`users.read`、`offline.access` として confirmed
 - X Developer Consoleに`X_CALLBACK_URL`を完全一致で登録
 - persistent token volumeを再起動後にも復号・readできることを確認
+- `/health.version`がdeploy対象commit SHAと一致
 - 実X accountでconsent → callback → username一致 → profile / recent posts backupが成功
 - customer URL / backend log / frontend bundle / proof DTOにraw token、authorization code、client secretがない
 - Developer Console prices と spending limits を operations notes に転記済み

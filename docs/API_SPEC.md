@@ -10,7 +10,7 @@
 
 | Method | Path | 目的 | 認証 | 外部書き込み |
 |---|---|---|---|---|
-| GET | `/health` | API health check | なし | なし |
+| GET | `/health` | API health check。`version`に`APP_VERSION`またはRailway commit SHAを返す | なし | なし |
 | GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata と一回限り `state` / S256 PKCE `code_challenge` を返す | なし | なし |
 | GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化され、専用header tokenが一致した場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | `x-xguard-diagnostic-token` header | なし |
 | GET | `/api/x/oauth/callback` | callback shape、`state`、TTL、replay を検証し、repository interface に token references を保存する | OAuth `state` | なし |

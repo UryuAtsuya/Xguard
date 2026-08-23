@@ -52,6 +52,8 @@ VITE_ADMIN_REDIRECT_URL=https://admin.example.com/auth/callback
 
 `SUPABASE_SERVICE_ROLE_KEY`はbackendとbootstrap scriptだけに置き、`VITE_*`には絶対に設定しない。Supabase Authのredirect allowlistにもadmin callback URLを登録する。
 
+`npm run build:sites:customer`はpublic HTTPSの`VITE_XGUARD_API_BASE_URL`を必須にする。`npm run build:sites:admin`はそれに加えて`VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_ADMIN_REDIRECT_URL`を検証する。localhost、private IP、URL credential、query/hash、API baseのpath、`service_role`形式のkeyはartifact生成前に拒否し、preflight outputへ値を表示しない。
+
 ## 初回ownerとrollout
 
 schema適用後、backend環境に`ADMIN_BOOTSTRAP_EMAIL`を一時的に設定し、次を一度だけ実行する。
