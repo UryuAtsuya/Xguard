@@ -2,16 +2,20 @@ import {
   Archive,
   Check,
   DatabaseBackup,
-  Eye,
   FileCheck2,
-  Fingerprint,
   KeyRound,
   LockKeyhole,
-  ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { BackupRun, ProofPublicPayload, XAccount } from "../../../shared/types";
-import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse } from "./api";
+import {
+  completeOAuthCallback,
+  fetchCustomerSession,
+  fetchHealth,
+  runBackup,
+  startOAuth,
+  type HealthResponse,
+} from "./api";
 import type { CustomerFlowPhase } from "./types";
 
 const usernamePattern = /^[A-Za-z0-9_]{1,15}$/;
@@ -30,6 +34,39 @@ export function CustomerPortal() {
     fetchHealth()
       .then((response) => setHealth(response))
       .catch(() => setNotice("現在サービスに接続できません。時間をおいて再度お試しください。"));
+  }, []);
+
+  useEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const resumedSessionToken = fragment.get("xguard_session");
+    const oauthError = fragment.get("xguard_oauth_error");
+
+    if (!resumedSessionToken && !oauthError) {
+      return;
+    }
+
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+
+    if (oauthError) {
+      setNotice(oauthErrorNotice(oauthError));
+      return;
+    }
+
+    if (!resumedSessionToken || !/^[A-Za-z0-9_-]{32,128}$/.test(resumedSessionToken)) {
+      setNotice("Xの本人確認結果を確認できませんでした。もう一度お試しください。");
+      return;
+    }
+
+    setIsBusy(true);
+    fetchCustomerSession(resumedSessionToken)
+      .then((response) => {
+        setUsername(response.connectedAccount.username);
+        setConnectedAccount(response.connectedAccount);
+        setSessionToken(resumedSessionToken);
+        setNotice(`@${response.connectedAccount.username} を確認できました。次に保全を開始してください。`);
+      })
+      .catch(() => setNotice("Xの本人確認結果を確認できませんでした。もう一度お試しください。"))
+      .finally(() => setIsBusy(false));
   }, []);
 
   const phase = useMemo<CustomerFlowPhase>(() => {
@@ -51,7 +88,7 @@ export function CustomerPortal() {
     setNotice(`@${requestedUsername} の本人確認を準備しています`);
 
     try {
-      const response = await startOAuth();
+      const response = await startOAuth(requestedUsername);
 
       if (response.mode === "configured") {
         window.location.assign(response.authorizationUrl);
@@ -101,32 +138,36 @@ export function CustomerPortal() {
     <section className="customer-portal" aria-label="お客様が見る画面">
       <section className="customer-stage">
         <div className="customer-story">
-          <p className="eyebrow">Private account archive</p>
+          <div className="night-reflection" aria-hidden="true" />
+          <p className="hero-kicker">夜の活動を、静かに守る。</p>
           <h1>
-            積み上げた発信を、<span>もしもの後にも。</span>
+            積み上げた発信を、<span>あなたの手元に。</span>
           </h1>
           <p className="hero-text">
-            プロフィールと直近の投稿を、公開せず静かに保全します。
-            アカウントに何か起きたときも、本人性と活動の履歴を確認できる状態にします。
+            プロフィールと直近の投稿を、誰にも見せず静かに保全します。
+            必要なときだけ、自分の活動を確かめられる記録にします。
           </p>
+          <a className="hero-start-link" href="#start">
+            保全をはじめる <span aria-hidden="true">↓</span>
+          </a>
           <ul className="hero-assurances" aria-label="XGuardの接続方針">
-            <li><Eye aria-hidden="true" size={17} /> 読み取り専用</li>
-            <li><LockKeyhole aria-hidden="true" size={17} /> 初期状態は非公開</li>
-            <li><ShieldCheck aria-hidden="true" size={17} /> 投稿・DM・フォロー操作なし</li>
+            <li><strong>読むだけ</strong><span>投稿・DM・フォロー操作はしません</span></li>
+            <li><strong>最初は非公開</strong><span>見せる範囲はあとから選べます</span></li>
+            <li><strong>必要な記録だけ</strong><span>プロフィールと直近25件を保全します</span></li>
           </ul>
           <div className="story-note">
-            <Fingerprint aria-hidden="true" size={21} />
-            <p><strong>見せる範囲は、自分で決める。</strong><span>保全したデータは、公開操作をするまで外部から見えません。</span></p>
+            <span aria-hidden="true">01</span>
+            <p><strong>公開するタイミングも、範囲も、自分で選ぶ。</strong><span>保全したデータは、公開操作をするまで外部から見えません。</span></p>
           </div>
         </div>
 
-        <aside className="journey-card" aria-label="保全の手続き">
+        <aside className="journey-card" id="start" aria-label="保全の手続き">
           <div className="journey-card-header">
             <div>
-              <p className="section-label">Setup</p>
-              <h2>保全の準備をはじめる</h2>
+              <p className="section-label">保全をはじめる</p>
+              <h2>3つの確認で、手元に残す。</h2>
             </div>
-            <span className="privacy-badge"><LockKeyhole aria-hidden="true" size={14} /> 非公開</span>
+            <span className="privacy-badge"><LockKeyhole aria-hidden="true" size={14} /> 最初は非公開</span>
           </div>
 
           <JourneyProgress phase={phase} />
@@ -134,10 +175,10 @@ export function CustomerPortal() {
           {phase === "account" ? (
             <form className="journey-action" onSubmit={handleConnect} noValidate>
               <div className="form-heading">
-                <span>STEP 1</span>
-                <h3>保全するアカウントを確認</h3>
+                <span>はじめに</span>
+                <h3>Xアカウントを確認</h3>
               </div>
-              <label htmlFor="x-username">Xのユーザー名</label>
+              <label htmlFor="x-username">保全したいXのユーザー名</label>
               <div className="username-field">
                 <span aria-hidden="true">@</span>
                 <input
@@ -157,14 +198,14 @@ export function CustomerPortal() {
               <p id="username-help">このあとXの認証画面で本人確認します。</p>
               <button className="primary-action" type="submit" disabled={isBusy || !health?.ok}>
                 <KeyRound aria-hidden="true" size={18} />
-                Xアカウントを確認
+                Xで本人確認する
               </button>
             </form>
           ) : phase === "backup" && connectedAccount ? (
             <section className="journey-action current-action" aria-labelledby="backup-action-title">
               <div className="form-heading">
-                <span>STEP 2</span>
-                <h3 id="backup-action-title">データを保全</h3>
+                <span>本人確認済み</span>
+                <h3 id="backup-action-title">記録を保全</h3>
               </div>
               <div className="connected-account">
                 <Check aria-hidden="true" size={18} />
@@ -173,13 +214,13 @@ export function CustomerPortal() {
               <p>プロフィールと直近25件の投稿を、読み取り専用で保存します。</p>
               <button className="primary-action" type="button" onClick={handleBackup} disabled={isBusy}>
                 <DatabaseBackup aria-hidden="true" size={18} />
-                保全を開始
+                プロフィールと投稿を保全する
               </button>
             </section>
           ) : proof && backupRun ? (
             <section className="journey-action current-action" aria-labelledby="backup-complete-title">
               <div className="form-heading success-heading">
-                <span>COMPLETE</span>
+                <span>保全完了</span>
                 <h3 id="backup-complete-title">保全が完了しました</h3>
               </div>
               <ProofSummary proof={proof} backupRun={backupRun} />
@@ -196,37 +237,37 @@ export function CustomerPortal() {
 
       <section className="archive-section" id="how-it-works" aria-labelledby="archive-title">
         <div className="section-intro">
-          <p className="eyebrow">What stays with you</p>
-          <h2 id="archive-title">残すのは、活動を説明するための最低限。</h2>
-          <p>公開範囲を広げず、もしもの時に自分の活動を確認できる記録だけを保全します。</p>
+          <p className="section-label">残す記録</p>
+          <h2 id="archive-title">あなたらしさが分かる、3つの記録。</h2>
+          <p>必要以上に集めません。自分の活動を説明するときに役立つものだけを残します。</p>
         </div>
         <div className="archive-grid">
-          <article><Fingerprint aria-hidden="true" size={22} /><span>01</span><h3>プロフィール</h3><p>表示名、ユーザー名、自己紹介など本人性を示す情報。</p></article>
-          <article><Archive aria-hidden="true" size={22} /><span>02</span><h3>直近の投稿</h3><p>活動の流れが分かる直近25件を読み取り専用で保存。</p></article>
-          <article><FileCheck2 aria-hidden="true" size={22} /><span>03</span><h3>証明ページ</h3><p>必要になった時だけ見せられる、初期非公開の確認ページ。</p></article>
+          <article><span>01</span><div><h3>アカウントの顔</h3><p>表示名、ユーザー名、自己紹介。本人らしさを確かめるためのプロフィール。</p></div></article>
+          <article><span>02</span><div><h3>最近の発信</h3><p>活動の流れが分かる直近25件。読むための権限だけで保存します。</p></div></article>
+          <article><span>03</span><div><h3>必要な時の証明</h3><p>初期状態は非公開。必要になった時だけ見せられる確認ページです。</p></div></article>
         </div>
       </section>
 
       <section className="safety-section" id="safety" aria-labelledby="safety-title">
         <div className="section-intro">
-          <p className="eyebrow">Designed for recovery</p>
-          <h2 id="safety-title">必要な記録だけを、静かに守る。</h2>
-          <p>アカウントを動かすためのサービスではなく、もしものときに備えて記録を残すためのサービスです。</p>
+          <p className="section-label">XGuardの約束</p>
+          <h2 id="safety-title">守るために、しないことを決めています。</h2>
+          <p>アカウントを動かすサービスではありません。記録を残すための、読み取り専用の保全サービスです。</p>
         </div>
         <div className="safety-grid">
           <article>
-            <Eye aria-hidden="true" size={21} />
-            <h3>読み取り専用で接続</h3>
+            <span aria-hidden="true">01</span>
+            <h3>アカウントを動かさない</h3>
             <p>XGuardが投稿、DM、フォロー操作を行うことはありません。</p>
           </article>
           <article>
-            <Archive aria-hidden="true" size={21} />
-            <h3>保存対象が明確</h3>
+            <span aria-hidden="true">02</span>
+            <h3>必要以上に集めない</h3>
             <p>プロフィールと直近25件の投稿を、復旧に備えた控えとして保存します。</p>
           </article>
           <article>
-            <LockKeyhole aria-hidden="true" size={21} />
-            <h3>初期状態は非公開</h3>
+            <span aria-hidden="true">03</span>
+            <h3>勝手に公開しない</h3>
             <p>保全した内容は、公開操作を行うまで外部向けに表示されません。</p>
           </article>
         </div>
@@ -234,7 +275,7 @@ export function CustomerPortal() {
 
       <section className="faq-section" id="faq" aria-labelledby="faq-title">
         <div>
-          <p className="eyebrow">Before you connect</p>
+          <p className="section-label">接続前の確認</p>
           <h2 id="faq-title">接続前に知っておきたいこと</h2>
         </div>
         <div className="faq-list">
@@ -243,12 +284,16 @@ export function CustomerPortal() {
             <p>ありません。XGuardは読み取り専用で、投稿・DM・フォロー操作を行いません。</p>
           </details>
           <details>
+            <summary>Xのパスワードを預ける必要はありますか？</summary>
+            <p>ありません。Xの公式認証画面で本人確認するため、XGuardへパスワードを入力することはありません。</p>
+          </details>
+          <details>
             <summary>何が保全されますか？</summary>
             <p>現在のプロフィール情報と、直近25件の投稿を保全します。</p>
           </details>
           <details>
-            <summary>保全した内容は公開されますか？</summary>
-            <p>初期状態では非公開です。保全完了後に内容の概要を確認できます。</p>
+            <summary>保全した内容を誰かに見られますか？</summary>
+            <p>初期状態では非公開です。見せる必要ができた時に、自分で公開範囲を選べます。</p>
           </details>
         </div>
       </section>
@@ -302,6 +347,19 @@ function ProofSummary({ proof, backupRun }: { proof: ProofPublicPayload; backupR
 
 function normalizeUsername(value: string) {
   return value.trim().replace(/^@/, "");
+}
+
+function oauthErrorNotice(code: string): string {
+  switch (code) {
+    case "consent_denied":
+      return "Xでの本人確認がキャンセルされました。接続する場合はもう一度お試しください。";
+    case "account_mismatch":
+      return "入力したユーザー名と、Xで確認したアカウントが一致しません。";
+    case "scope_mismatch":
+      return "読み取り専用の権限を確認できませんでした。もう一度お試しください。";
+    default:
+      return "Xの本人確認を完了できませんでした。時間をおいて再度お試しください。";
+  }
 }
 
 function formatDateTime(value: string) {

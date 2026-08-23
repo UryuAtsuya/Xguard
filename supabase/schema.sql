@@ -86,7 +86,11 @@ create table public.x_oauth_connections (
 create table public.oauth_states (
   state text primary key,
   code_verifier text not null,
+  requested_username text,
   expires_at timestamptz not null,
+  constraint oauth_states_requested_username_format check (
+    requested_username is null or requested_username ~ '^[A-Za-z0-9_]{1,15}$'
+  ),
   created_at timestamptz not null default now()
 );
 

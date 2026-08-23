@@ -89,6 +89,21 @@ describe("XGuard API prototype", () => {
     expect(JSON.stringify(response)).not.toContain("code_verifier");
   });
 
+  httpIt("requires a valid target username before starting configured OAuth", async () => {
+    const app = createApp(createRuntimeConfig({
+      NODE_ENV: "test",
+      APP_BASE_URL: "https://xguard.example.com",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    }));
+
+    await request(app).get("/api/x/oauth/start").expect(400, { error: "invalid_x_username" });
+    await request(app).get("/api/x/oauth/start").query({ username: "invalid-name" }).expect(400, {
+      error: "invalid_x_username",
+    });
+    await request(app).get("/api/x/oauth/start").query({ username: "valid_name" }).expect(200);
+  });
+
   it("stores a one-time configured OAuth state with S256 PKCE and rejects replayed callbacks", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "test",
@@ -101,7 +116,7 @@ describe("XGuard API prototype", () => {
     const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
     const startResponse = createRouteResponseRecorder();
 
-    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    await startRoute.stack[0].handle(createRouteRequest(undefined, { username: "xguard_creator" }), startResponse);
     const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
     const authorizationUrl = new URL(startBody.authorizationUrl);
 
@@ -165,7 +180,7 @@ describe("XGuard API prototype", () => {
     const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
     const startResponse = createRouteResponseRecorder();
 
-    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    await startRoute.stack[0].handle(createRouteRequest(undefined, { username: "xguard_creator" }), startResponse);
     const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
     const expiredNow = new Date(new Date(startBody.stateExpiresAt).getTime() + 1_000);
     const originalNow = Date.now;
@@ -185,7 +200,7 @@ describe("XGuard API prototype", () => {
     }
   });
 
-  it("returns unavailable exchange without vault refs or session material for configured production OAuth callbacks", async () => {
+  it("returns an unavailable exchange without token refs or session material when live composition is absent", async () => {
     const config = createRuntimeConfig({
       NODE_ENV: "production",
       ...productionConfirmations,
@@ -198,7 +213,7 @@ describe("XGuard API prototype", () => {
     const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
     const startResponse = createRouteResponseRecorder();
 
-    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    await startRoute.stack[0].handle(createRouteRequest(undefined, { username: "xguard_creator" }), startResponse);
     const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
     const callbackResponse = createRouteResponseRecorder();
     await callbackRoute.stack[0].handle(
@@ -207,7 +222,7 @@ describe("XGuard API prototype", () => {
     );
 
     expect(callbackResponse.statusCode).toBe(501);
-    expect(callbackResponse.body).toEqual({ error: "x_oauth_token_exchange_not_implemented" });
+    expect(callbackResponse.body).toEqual({ error: "x_oauth_exchange_unavailable" });
     expect(JSON.stringify(callbackResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(callbackResponse.body)).not.toContain("sessionToken");
     expect(await app.locals.sessionRepository.lookup("authorization-code")).toBeUndefined();
@@ -246,7 +261,7 @@ describe("XGuard API prototype", () => {
     const callbackRoute = findRegisteredGetRoute(app, "/api/x/oauth/callback");
     const startResponse = createRouteResponseRecorder();
 
-    await startRoute.stack[0].handle(createRouteRequest(), startResponse);
+    await startRoute.stack[0].handle(createRouteRequest(undefined, { username: "xguard_creator" }), startResponse);
     const startBody = startResponse.body as ReturnType<typeof buildOAuthStartResponse>;
     const callbackResponse = createRouteResponseRecorder();
     await callbackRoute.stack[0].handle(
@@ -273,10 +288,112 @@ describe("XGuard API prototype", () => {
         codeVerifier: expect.stringMatching(/^[A-Za-z0-9_-]{86}$/),
         callbackUrl: "https://xguard.example.com/api/x/oauth/callback",
         scopes: ["tweet.read", "users.read", "offline.access"],
+        expectedUsername: "xguard_creator",
       },
     ]);
     expect(JSON.stringify(callbackResponse.body)).not.toContain("vault://");
     expect(JSON.stringify(callbackResponse.body)).not.toContain("real-exchange-ref");
+  });
+
+  httpIt("returns a configured callback to the customer app and restores the connected session", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      ...productionConfirmations,
+      APP_BASE_URL: "https://api.xguard.example.com",
+      CUSTOMER_APP_URL: "https://app.xguard.example.com/",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    });
+    const exchangeInputs: unknown[] = [];
+    const backupInputs: unknown[] = [];
+    const exchangeService: XOAuthTokenExchangeService = {
+      async exchange(input) {
+        exchangeInputs.push(input);
+        return {
+          ok: true,
+          connectedAccount: fixtureAccount,
+          token: {
+            xAccountId: fixtureAccount.id,
+            provider: "x",
+            scope: ["tweet.read", "users.read", "offline.access"],
+            accessTokenRef: "xguard-secret://x-oauth/account/access",
+            refreshTokenRef: "xguard-secret://x-oauth/account/refresh",
+          },
+        };
+      },
+    };
+    const app = createApp(config, {
+      xOAuthTokenExchangeService: exchangeService,
+      backupService: {
+        async runBackup(tweetLimit, xAccountId) {
+          backupInputs.push({ tweetLimit, xAccountId });
+          return new MockBackupService(
+            new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets),
+          ).runBackup(tweetLimit);
+        },
+      },
+    });
+    const startResponse = await request(app).get("/api/x/oauth/start").query({ username: "@XGuard_Creator" });
+    const callbackResponse = await request(app)
+      .get("/api/x/oauth/callback")
+      .query({ code: "authorization-code", state: startResponse.body.state });
+
+    expect(callbackResponse.status).toBe(303);
+    expect(callbackResponse.headers["cache-control"]).toBe("no-store");
+    expect(callbackResponse.headers["referrer-policy"]).toBe("no-referrer");
+    expect(callbackResponse.text).toBe("");
+    const redirectUrl = new URL(callbackResponse.headers.location);
+    const sessionToken = new URLSearchParams(redirectUrl.hash.slice(1)).get("xguard_session");
+    expect(redirectUrl.origin).toBe("https://app.xguard.example.com");
+    expect(sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(callbackResponse.headers.location).not.toContain("authorization-code");
+    expect(exchangeInputs).toEqual([
+      expect.objectContaining({ expectedUsername: "XGuard_Creator" }),
+    ]);
+
+    const sessionResponse = await request(app)
+      .get("/api/customer/session")
+      .set("Authorization", `Bearer ${sessionToken}`);
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body).toEqual({ connectedAccount: fixtureAccount, writesEnabled: false });
+    expect(JSON.stringify(sessionResponse.body)).not.toContain("xguard-secret://");
+
+    const backupResponse = await request(app)
+      .post("/api/backup/run")
+      .set("Authorization", `Bearer ${sessionToken}`)
+      .send({ tweetLimit: 25 });
+    expect(backupResponse.status).toBe(201);
+    expect(backupInputs).toEqual([{ tweetLimit: 25, xAccountId: fixtureAccount.id }]);
+  });
+
+  httpIt("consumes denied consent state and returns only a fixed customer-safe error", async () => {
+    const config = createRuntimeConfig({
+      NODE_ENV: "production",
+      ...productionConfirmations,
+      APP_BASE_URL: "https://api.xguard.example.com",
+      CUSTOMER_APP_URL: "https://app.xguard.example.com/",
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "super-secret-value",
+    });
+    const app = createApp(config);
+    const startResponse = await request(app).get("/api/x/oauth/start").query({ username: "xguard_creator" });
+    const callbackResponse = await request(app)
+      .get("/api/x/oauth/callback")
+      .query({
+        error: "access_denied",
+        error_description: "sensitive provider detail",
+        state: startResponse.body.state,
+      });
+
+    expect(callbackResponse.status).toBe(303);
+    expect(callbackResponse.headers.location).toBe(
+      "https://app.xguard.example.com/#xguard_oauth_error=consent_denied",
+    );
+    expect(callbackResponse.headers.location).not.toContain("sensitive");
+    const replayResponse = await request(app)
+      .get("/api/x/oauth/callback")
+      .query({ error: "access_denied", state: startResponse.body.state });
+    expect(replayResponse.status).toBe(403);
   });
 
   it("reports configured OAuth status without exposing secret material", async () => {

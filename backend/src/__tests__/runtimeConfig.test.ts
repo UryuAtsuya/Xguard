@@ -49,6 +49,17 @@ describe("runtime confirmation gates", () => {
     ).toThrow("invalid_runtime_env:ADMIN_REDIRECT_URL");
   });
 
+  it("rejects an insecure customer OAuth return URL in production", () => {
+    expect(() =>
+      createRuntimeConfig({
+        ...productionEnv,
+        CUSTOMER_APP_URL: "http://app.xguard.example.com/",
+        PRICING_CONFIRMED: "true",
+        COMPLIANCE_CONFIRMED: "true",
+      }),
+    ).toThrow("invalid_runtime_env:CUSTOMER_APP_URL");
+  });
+
   it("parses customer and admin CORS allowlists independently", () => {
     const config = createRuntimeConfig({
       CUSTOMER_CORS_ORIGINS: "https://app.example.com/path",

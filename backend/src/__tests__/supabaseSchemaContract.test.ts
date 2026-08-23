@@ -159,6 +159,8 @@ describe("Supabase schema contract", () => {
   it("defines OAuth state persistence with PKCE verifier and service-role-only exposure", () => {
     expect(oauthStatesTableSql).toContain("state text primary key");
     expect(oauthStatesTableSql).toContain("code_verifier text not null");
+    expect(oauthStatesTableSql).toContain("requested_username text");
+    expect(oauthStatesTableSql).toContain("requested_username ~ '^[A-Za-z0-9_]{1,15}$'");
     expect(oauthStatesTableSql).toContain("expires_at timestamptz not null");
     expect(oauthStatesTableSql).toContain("created_at timestamptz not null default now()");
 

@@ -110,7 +110,7 @@ describe("AdminApp", () => {
     render(<AdminApp />);
 
     expect(await screen.findByRole("heading", { name: "Team" })).toBeInTheDocument();
-    expect(fetchAdminMembers).toHaveBeenCalledWith("admin-jwt");
+    await waitFor(() => expect(fetchAdminMembers).toHaveBeenCalledWith("admin-jwt"));
     await waitFor(() => expect(screen.getAllByText("owner@example.com")).toHaveLength(2));
   });
 

@@ -3,6 +3,8 @@ import { createRuntimeConfig } from "../config/runtimeConfig.js";
 import { SupabaseContentComplianceEventHttpStore } from "../repositories/supabaseContentComplianceEventHttpStore.js";
 import { SupabaseOAuthStateHttpStore } from "../repositories/supabaseOAuthStateHttpStore.js";
 import { SupabaseProofPageHttpStore } from "../repositories/supabaseProofPageHttpStore.js";
+import { LiveBackupService } from "../services/liveBackupService.js";
+import { LiveXOAuthTokenExchangeService } from "../services/xOAuthTokenExchangeService.js";
 import { createServerAppOptions } from "../serverApp.js";
 
 describe("server app composition", () => {
@@ -67,5 +69,36 @@ describe("server app composition", () => {
         },
       ),
     ).toThrow("invalid_runtime_env:SUPABASE_SERVICE_ROLE_KEY");
+  });
+
+  it("wires live X OAuth and backup without requiring Supabase when X is configured", () => {
+    const options = createServerAppOptions(
+      createRuntimeConfig({
+        X_CLIENT_ID: "real-client-id",
+        X_CLIENT_SECRET: "real-client-secret",
+        CUSTOMER_APP_URL: "https://app.xguard.example.com",
+      }),
+      {
+        X_CLIENT_SECRET: "real-client-secret",
+        X_TOKEN_SECRET_STORE_DIR: "/tmp/xguard-test-token-store",
+        X_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+      },
+    );
+
+    expect(options.xOAuthTokenExchangeService).toBeInstanceOf(LiveXOAuthTokenExchangeService);
+    expect(options.backupService).toBeInstanceOf(LiveBackupService);
+    expect(options.oauthStateRepository).toBeUndefined();
+  });
+
+  it("fails startup when live X OAuth lacks its backend-only secret storage env", () => {
+    const config = createRuntimeConfig({
+      X_CLIENT_ID: "real-client-id",
+      X_CLIENT_SECRET: "real-client-secret",
+      CUSTOMER_APP_URL: "https://app.xguard.example.com",
+    });
+
+    expect(() => createServerAppOptions(config, { X_CLIENT_SECRET: "real-client-secret" })).toThrow(
+      "invalid_runtime_env:X_TOKEN_SECRET_STORE_DIR",
+    );
   });
 });

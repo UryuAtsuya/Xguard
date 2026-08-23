@@ -7,7 +7,7 @@ XGuardは、Xアカウントのプロフィールと直近投稿をread-onlyで�
 - customerとadminは、同じrepository内の独立したVite + React applicationです。
 - customerはmock OAuthを使ったローカル保全フローまで確認できます。
 - adminはSupabase Authの招待済みemail magic linkとrole確認を前提にしています。
-- configured X OAuthの実token exchangeは未実装です。production callbackは安全のため`501`で停止します。
+- configured X OAuthのlive token exchange、本人username照合、暗号化token保存、profile / recent posts readは実装済みです。実credentialを使うstaging smokeは未完了です。
 - production deploy、実Supabase接続、実domainでのcustomer/admin分離確認は、コード・CI完了とは別の検証項目です。
 
 ## 画面構成
@@ -42,7 +42,7 @@ productionではcustomerを`app.<base-domain>`、adminを`admin.<base-domain>`�
 2. 確認できたアカウントと入力usernameが一致した場合だけ、プロフィールと直近25投稿を保全する。
 3. 完了後にbackup runと公開用proof DTOの要約を表示する。
 
-画面内には保全対象、安全性、FAQも表示します。mock modeではOAuth callbackをローカルで完了できますが、実X OAuth接続が完成したことは意味しません。
+画面内には保全対象、安全性、FAQも表示します。mock modeではOAuth callbackをローカルで完了できます。configured modeではcallback後のsessionをURL fragmentでcustomer画面へ一度だけ渡し、画面復帰直後にfragmentを削除します。
 
 ### admin
 
@@ -116,7 +116,7 @@ baselineがgreenになった後は、機能追加を広げず次の順で確認�
 3. 別origin smoke: customer/adminのCORS、adminの`noindex`、bundle境界、API権限分離。
 4. 結果をpass/failで記録し、失敗だけを小さなIssueにする。
 
-この4項目が揃った状態を「テスト段階完了」とし、production準備は別判定にします。実X OAuth token exchange、実credential、DNS、deploy runtimeの確認が終わるまではproduction-readyと扱いません。
+この4項目が揃った状態を「テスト段階完了」とし、production準備は別判定にします。live exchangeのコード実装だけでは実接続の証明になりません。実X credential、Supabase staging、DNS、deploy runtimeの確認が終わるまではproduction-readyと扱いません。
 
 ## v0の安全境界
 

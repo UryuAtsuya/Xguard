@@ -1,16 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomerApp } from "./CustomerApp";
-import { completeOAuthCallback, fetchHealth, runBackup, startOAuth } from "./api";
+import { completeOAuthCallback, fetchCustomerSession, fetchHealth, runBackup, startOAuth } from "./api";
 
 vi.mock("./api", () => ({
   completeOAuthCallback: vi.fn(),
+  fetchCustomerSession: vi.fn(),
   fetchHealth: vi.fn(),
   startOAuth: vi.fn(),
   runBackup: vi.fn(),
 }));
 
 const mockedCompleteOAuthCallback = vi.mocked(completeOAuthCallback);
+const mockedFetchCustomerSession = vi.mocked(fetchCustomerSession);
 const mockedFetchHealth = vi.mocked(fetchHealth);
 const mockedStartOAuth = vi.mocked(startOAuth);
 const mockedRunBackup = vi.mocked(runBackup);
@@ -50,6 +52,18 @@ describe("CustomerApp", () => {
       tokenStorage: "repository-ref-only",
       writesEnabled: false,
     });
+    mockedFetchCustomerSession.mockResolvedValue({
+      connectedAccount: {
+        id: "xacct_fixture_001",
+        userId: "user_fixture_001",
+        xUserId: "1234567890",
+        username: "xguard_creator",
+        displayName: "XGuard Creator",
+        status: "connected",
+        connectedAt: "2026-07-19T00:00:00.000Z",
+      },
+      writesEnabled: false,
+    });
     mockedRunBackup.mockResolvedValue({
       backupRun: {
         id: "backup-1",
@@ -81,15 +95,18 @@ describe("CustomerApp", () => {
   it("keeps the existing customer backup flow", async () => {
     render(<CustomerApp />);
 
-    expect(screen.getByRole("heading", { name: "積み上げた発信を、もしもの後にも。" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "積み上げた発信を、あなたの手元に。" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "保全をはじめる" })).toHaveAttribute("href", "#start");
+    expect(screen.queryByText("Private account archive")).not.toBeInTheDocument();
     expect(screen.getByText("パスワードをXGuardに入力することはありません。", { exact: false })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Xアカウントを確認" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Xで本人確認する" })).toBeEnabled());
     fireEvent.change(screen.getByRole("textbox", { name: "保全するXアカウント" }), {
       target: { value: "xguard_creator" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Xアカウントを確認" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "保全を開始" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "保全を開始" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xで本人確認する" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "プロフィールと投稿を保全する" })).toBeEnabled());
+    expect(mockedStartOAuth).toHaveBeenCalledWith("xguard_creator");
+    fireEvent.click(screen.getByRole("button", { name: "プロフィールと投稿を保全する" }));
 
     await waitFor(() => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "customer-session");
@@ -97,6 +114,28 @@ describe("CustomerApp", () => {
     });
     expect(screen.queryByText(/Admin/)).not.toBeInTheDocument();
   }, 10_000);
+
+  it("resumes a configured OAuth callback from a one-time URL fragment and removes it", async () => {
+    const resumedSessionToken = "a".repeat(43);
+    window.history.pushState({}, "", `/#xguard_session=${resumedSessionToken}`);
+
+    render(<CustomerApp />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "プロフィールと投稿を保全する" })).toBeEnabled());
+    expect(mockedFetchCustomerSession).toHaveBeenCalledWith(resumedSessionToken);
+    expect(window.location.hash).toBe("");
+    expect(screen.getByText("@xguard_creator")).toBeInTheDocument();
+  });
+
+  it("shows a safe retry message after denied X consent and removes provider state from the URL", async () => {
+    window.history.pushState({}, "", "/#xguard_oauth_error=consent_denied");
+
+    render(<CustomerApp />);
+
+    expect(await screen.findByText("Xでの本人確認がキャンセルされました。接続する場合はもう一度お試しください。")).toBeInTheDocument();
+    expect(window.location.hash).toBe("");
+    expect(mockedFetchCustomerSession).not.toHaveBeenCalled();
+  });
 
   it.each(["/admin", "/login", "/unknown"])("renders a customer-side 404 for %s", (path) => {
     window.history.pushState({}, "", path);

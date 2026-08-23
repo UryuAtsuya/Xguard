@@ -22,17 +22,17 @@ export function CustomerApp() {
           <ShieldCheck aria-hidden="true" size={22} />
           <span>
             <strong>XGuard</strong>
-            <small>Private archive for X</small>
+            <small>Xの記録を、あなたの手元に</small>
           </span>
         </a>
         <nav aria-label="ページ内メニュー">
-          <a href="#how-it-works">保全されるもの</a>
-          <a href="#safety">安全性</a>
+          <a href="#how-it-works">残すもの</a>
+          <a href="#safety">守り方</a>
           <a href="#faq">よくある質問</a>
         </nav>
         <span className="header-privacy">
           <ShieldCheck aria-hidden="true" size={15} />
-          初期状態は非公開
+          公開は自分で選べます
         </span>
       </header>
       <CustomerPortal />
