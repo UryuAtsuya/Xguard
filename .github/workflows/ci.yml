@@ -54,3 +54,30 @@ jobs:
 
       - name: Build and test
         run: npm run check
+
+      - name: Build separated Sites artifacts
+        env:
+          VITE_XGUARD_API_BASE_URL: https://api.staging.example.com
+          VITE_SUPABASE_URL: https://project.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_contract_value
+          VITE_ADMIN_REDIRECT_URL: https://admin.staging.example.com/auth/callback
+        run: |
+          npm run build:sites:customer
+          npm run build:sites:admin
+
+  backend-container:
+    name: Backend container smoke
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build and smoke-test backend container
+        run: npm run check:backend-container

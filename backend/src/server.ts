@@ -6,6 +6,6 @@ import { createServerAppOptions } from "./serverApp.js";
 const config = createRuntimeConfig();
 const app = createApp(config, createServerAppOptions(config));
 
-app.listen(config.port, () => {
+app.listen(config.port, "0.0.0.0", () => {
   console.log(`XGuard API prototype listening on http://localhost:${config.port}`);
 });

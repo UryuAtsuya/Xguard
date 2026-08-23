@@ -46,6 +46,18 @@ describe("XGuard API prototype", () => {
     "direct_messages.write",
   ];
 
+  httpIt("exposes the deployed version on the public health endpoint", async () => {
+    const app = createApp(createRuntimeConfig({ APP_VERSION: "release-2026.08.23" }));
+
+    const response = await request(app).get("/health").expect(200);
+
+    expect(response.body).toMatchObject({
+      ok: true,
+      service: "xguard-api",
+      version: "release-2026.08.23",
+    });
+  });
+
   it("keeps the mock OAuth scope read-only and minimum for v0", async () => {
     const response = buildMockOAuthStartResponse();
 
