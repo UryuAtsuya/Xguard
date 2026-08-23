@@ -16,6 +16,7 @@ describe("Supabase OAuth state HTTP store", () => {
     await store.save({
       state: "oauth-state-1",
       codeVerifier: "pkce-verifier-1",
+      requestedUsername: "xguard_creator",
       expiresAt: new Date("2026-07-06T04:00:00.000Z"),
     });
 
@@ -34,6 +35,7 @@ describe("Supabase OAuth state HTTP store", () => {
       JSON.stringify({
         state: "oauth-state-1",
         code_verifier: "pkce-verifier-1",
+        requested_username: "xguard_creator",
         expires_at: "2026-07-06T04:00:00.000Z",
       }),
     );
@@ -50,6 +52,7 @@ describe("Supabase OAuth state HTTP store", () => {
           {
             state: "oauth-state-1",
             code_verifier: "pkce-verifier-1",
+            requested_username: "xguard_creator",
             expires_at: "2999-07-06T04:00:00.000Z",
           },
         ]);
@@ -63,6 +66,7 @@ describe("Supabase OAuth state HTTP store", () => {
       record: {
         state: "oauth-state-1",
         codeVerifier: "pkce-verifier-1",
+        requestedUsername: "xguard_creator",
         expiresAt: new Date("2999-07-06T04:00:00.000Z"),
       },
     });

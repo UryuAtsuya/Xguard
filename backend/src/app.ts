@@ -31,7 +31,11 @@ import {
   createDefaultXOAuthTokenExchangeService,
   type XOAuthTokenExchangeService,
 } from "./services/xOAuthTokenExchangeService.js";
-import type { AdminDatabaseSnapshot, AdminDatabaseTableSummary } from "../../shared/types.js";
+import type {
+  AdminDatabaseSnapshot,
+  AdminDatabaseTableSummary,
+  XAccount,
+} from "../../shared/types.js";
 import {
   RejectingAdminTokenVerifier,
   type AdminTokenVerifier,
@@ -48,6 +52,7 @@ import {
   type AdminInviteService,
 } from "./admin/adminInviteService.js";
 import { AdminService, AdminServiceError } from "./admin/adminService.js";
+import type { BackupRunResult } from "./services/mockBackupService.js";
 
 export const V0_READ_ONLY_OAUTH_SCOPES = V0_READ_ONLY_X_SCOPES;
 
@@ -124,12 +129,17 @@ export const buildMockOAuthStartResponse = buildOAuthStartResponse;
 
 export interface CreateAppOptions {
   xOAuthTokenExchangeService?: XOAuthTokenExchangeService;
+  backupService?: BackupService;
   oauthStateRepository?: OAuthStateRepository;
   proofPageStore?: SupabaseProofPageStore;
   contentComplianceEventStore?: SupabaseContentComplianceEventStore;
   adminTokenVerifier?: AdminTokenVerifier;
   adminMemberRepository?: AdminMemberRepository;
   adminInviteService?: AdminInviteService;
+}
+
+export interface BackupService {
+  runBackup(tweetLimit: number, xAccountId?: string): Promise<BackupRunResult>;
 }
 
 export function buildCorsOptions(
@@ -165,7 +175,9 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     options.xOAuthTokenExchangeService ?? createDefaultXOAuthTokenExchangeService(config);
   const contentComplianceEventRepository = createContentComplianceEventRepository(config, options);
   const usageLedger = createInMemoryApiUsageLedgerService();
-  const backupService = new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
+  const backupService =
+    options.backupService ??
+    new MockBackupService(new MockXApiClient(fixtureAccount, fixtureProfile, fixtureTweets), usageLedger);
   const proofPageRepository = createProofPageRepository(config, options);
   const adminMemberRepository = options.adminMemberRepository ?? new InMemoryAdminMemberRepository();
   const adminService = new AdminService(
@@ -207,12 +219,22 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
     });
   });
 
-  app.get("/api/x/oauth/start", async (_request, response) => {
+  app.get("/api/x/oauth/start", async (request, response) => {
+    const query = z
+      .object({ username: z.string().trim().regex(/^@?[A-Za-z0-9_]{1,15}$/).optional() })
+      .safeParse(request.query);
+
+    if (!query.success || (config.xOAuth.mode === "configured" && !query.data.username)) {
+      response.status(400).json({ error: "invalid_x_username" });
+      return;
+    }
+
     const proofKey = createOAuthStartProofKey(config);
 
     await oauthStateRepository.save({
       state: proofKey.state,
       codeVerifier: proofKey.codeVerifier,
+      requestedUsername: normalizeXUsername(query.data.username),
       expiresAt: proofKey.expiresAt,
     });
 
@@ -234,7 +256,14 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
   });
 
   app.get("/api/x/oauth/callback", async (request, response) => {
-    const query = z.object({ code: z.string().min(1), state: z.string().min(1) }).safeParse(request.query);
+    const query = z
+      .object({
+        code: z.string().min(1).optional(),
+        state: z.string().min(1),
+        error: z.literal("access_denied").optional(),
+      })
+      .refine((value) => Boolean(value.code) !== Boolean(value.error))
+      .safeParse(request.query);
 
     if (!query.success) {
       response.status(400).json({ error: "invalid_oauth_callback", details: query.error.flatten().fieldErrors });
@@ -250,22 +279,34 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
       return;
     }
 
+    if (query.data.error === "access_denied") {
+      respondOAuthCallbackError(config, response, "consent_denied", 400);
+      return;
+    }
+
     const exchange = await xOAuthTokenExchangeService.exchange({
-      code: query.data.code,
+      code: query.data.code!,
       codeVerifier: state.record.codeVerifier,
       callbackUrl: config.xOAuth.callbackUrl,
       scopes: V0_READ_ONLY_OAUTH_SCOPES,
+      expectedUsername: state.record.requestedUsername,
     });
 
     if (!exchange.ok) {
-      response.status(501).json({ error: "x_oauth_token_exchange_not_implemented" });
+      const error = mapOAuthExchangeFailure(exchange.reason);
+      respondOAuthCallbackError(config, response, error.code, error.status);
       return;
     }
 
     await tokenRepository.saveXToken(exchange.token);
 
     const sessionToken = randomBytes(32).toString("base64url");
-    await sessionRepository.save(sessionToken, exchange.connectedAccount.userId);
+    await sessionRepository.save(sessionToken, exchange.connectedAccount.userId, exchange.connectedAccount);
+
+    if (config.xOAuth.mode === "configured" && config.customerAppUrl) {
+      redirectToCustomerApp(config.customerAppUrl, response, { xguard_session: sessionToken });
+      return;
+    }
 
     response.json({
       connectedAccount: exchange.connectedAccount,
@@ -273,6 +314,17 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
       tokenStorage: "repository-ref-only",
       writesEnabled: false,
     });
+  });
+
+  app.get("/api/customer/session", requireAuth(sessionRepository), (request, response) => {
+    const connectedAccount = getAuthenticatedConnectedAccount(request);
+    if (!connectedAccount) {
+      response.status(409).json({ error: "connected_account_required" });
+      return;
+    }
+
+    response.set("Cache-Control", "no-store");
+    response.json({ connectedAccount, writesEnabled: false });
   });
 
   app.post("/api/backup/run", requireAuth(sessionRepository), async (request, response) => {
@@ -283,7 +335,10 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
       return;
     }
 
-    const result = await backupService.runBackup(body.data.tweetLimit);
+    const result = await backupService.runBackup(
+      body.data.tweetLimit,
+      getAuthenticatedConnectedAccount(request)?.id,
+    );
     await proofPageRepository.create({
       userId: getAuthenticatedUserId(request),
       visibility: "private",
@@ -605,6 +660,7 @@ function tableSummary(
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
+  connectedAccount?: XAccount;
 }
 
 interface AdminAuthenticatedRequest extends Request {
@@ -707,14 +763,15 @@ function requireAuth(sessionRepository: InMemorySessionRepository) {
       return;
     }
 
-    const userId = await sessionRepository.lookup(token);
+    const session = await sessionRepository.find(token);
 
-    if (!userId) {
+    if (!session) {
       response.status(401).json({ error: "invalid_session" });
       return;
     }
 
-    request.userId = userId;
+    request.userId = session.userId;
+    request.connectedAccount = session.connectedAccount;
     next();
   };
 }
@@ -727,6 +784,61 @@ function getAuthenticatedUserId(request: Request): string {
   }
 
   return userId;
+}
+
+function getAuthenticatedConnectedAccount(request: Request): XAccount | undefined {
+  return (request as AuthenticatedRequest).connectedAccount;
+}
+
+function normalizeXUsername(value: string | undefined): string | undefined {
+  return value?.replace(/^@/, "");
+}
+
+function mapOAuthExchangeFailure(reason: string): { code: string; status: number } {
+  switch (reason) {
+    case "expected_username_missing":
+      return { code: "username_required", status: 400 };
+    case "scope_mismatch":
+      return { code: "scope_mismatch", status: 400 };
+    case "account_mismatch":
+      return { code: "account_mismatch", status: 409 };
+    case "token_exchange_failed":
+      return { code: "token_exchange_failed", status: 502 };
+    case "x_api_failed":
+      return { code: "account_lookup_failed", status: 502 };
+    case "secret_storage_failed":
+      return { code: "secret_storage_failed", status: 503 };
+    default:
+      return { code: "exchange_unavailable", status: 501 };
+  }
+}
+
+function respondOAuthCallbackError(
+  config: RuntimeConfig,
+  response: Response,
+  code: string,
+  status: number,
+): void {
+  if (config.xOAuth.mode === "configured" && config.customerAppUrl) {
+    redirectToCustomerApp(config.customerAppUrl, response, { xguard_oauth_error: code });
+    return;
+  }
+
+  response.status(status).json({ error: `x_oauth_${code}` });
+}
+
+function redirectToCustomerApp(
+  customerAppUrl: string,
+  response: Response,
+  fragment: Record<string, string>,
+): void {
+  const target = new URL(customerAppUrl);
+  target.hash = new URLSearchParams(fragment).toString();
+  response.status(303);
+  response.set("Cache-Control", "no-store");
+  response.set("Referrer-Policy", "no-referrer");
+  response.set("Location", target.toString());
+  response.send();
 }
 
 function getStringParam(request: Request, paramName: string): string {

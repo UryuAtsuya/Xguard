@@ -63,7 +63,7 @@ curl -sS http://localhost:4000/health | jq
 以下は mock OAuth state を取得し、callback、backup run、backup status、proof public 化、proof DTO 取得までを一気に確認する。
 
 ```bash
-START_JSON=$(curl -sS http://localhost:4000/api/x/oauth/start)
+START_JSON=$(curl -sS 'http://localhost:4000/api/x/oauth/start?username=xguard_creator')
 STATE=$(printf '%s' "$START_JSON" | jq -r '.state')
 
 CALLBACK_JSON=$(curl -sS "http://localhost:4000/api/x/oauth/callback?code=mock-authorization-code&state=${STATE}")
@@ -102,10 +102,9 @@ curl -sS "http://localhost:4000/api/recovery/${RUN_ID}/proof" \
 
 `http://localhost:5173/` を開き、以下を確認する。
 
-- ステータス表示が `mock` または configured mode を示す。
-- `Connect read-only X` で read-only OAuth URL 生成後、mock mode では接続済みになる。
-- `Run backup` で backup が完了し、Proof preview に保存投稿数と代表投稿が表示される。
-- Scope 表示が `tweet.read`、`users.read`、`offline.access` の範囲に収まっている。
+- username入力後に`Xで本人確認する`を押すと、mock modeでは接続済みになる。
+- `プロフィールと投稿を保全する`でbackupが完了し、保全件数が表示される。
+- XGuardが投稿、DM、follow操作をしないread-only方針が表示される。
 
 ## 5. CI 相当の確認
 

@@ -10,6 +10,7 @@ export interface SupabaseOAuthStateHttpStoreOptions {
 interface SupabaseOAuthStateRow {
   state: string;
   code_verifier: string;
+  requested_username?: string | null;
   expires_at: string;
   created_at?: string;
 }
@@ -37,6 +38,7 @@ export class SupabaseOAuthStateHttpStore implements OAuthStateRepository {
       body: JSON.stringify({
         state: record.state,
         code_verifier: record.codeVerifier,
+        requested_username: record.requestedUsername ?? null,
         expires_at: record.expiresAt.toISOString(),
       }),
     });
@@ -67,6 +69,7 @@ export class SupabaseOAuthStateHttpStore implements OAuthStateRepository {
     const record = {
       state: row.state,
       codeVerifier: row.code_verifier,
+      requestedUsername: row.requested_username ?? undefined,
       expiresAt: new Date(row.expires_at),
     };
 

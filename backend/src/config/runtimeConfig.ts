@@ -4,6 +4,7 @@ export interface RuntimeConfig {
   pricingConfirmed: boolean;
   complianceConfirmed: boolean;
   appBaseUrl?: string;
+  customerAppUrl?: string;
   corsAllowedOrigins?: string[];
   customerCorsAllowedOrigins?: string[];
   adminCorsAllowedOrigins?: string[];
@@ -57,6 +58,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
 
   const port = parsePort(env.PORT);
   const appBaseUrl = parseOptionalUrl("APP_BASE_URL", env.APP_BASE_URL);
+  const customerAppUrl = parseOptionalUrl("CUSTOMER_APP_URL", env.CUSTOMER_APP_URL);
   const corsAllowedOrigins = parseCorsAllowedOrigins(env.CORS_ORIGINS, appBaseUrl, nodeEnv);
   const customerCorsAllowedOrigins =
     parseExplicitCorsOrigins("CUSTOMER_CORS_ORIGINS", env.CUSTOMER_CORS_ORIGINS) ??
@@ -105,6 +107,10 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     throw new Error("invalid_runtime_env:X_CALLBACK_URL");
   }
 
+  if (nodeEnv === "production" && customerAppUrl && !isSecurePublicUrl(customerAppUrl)) {
+    throw new Error("invalid_runtime_env:CUSTOMER_APP_URL");
+  }
+
   if (!clientId) {
     return {
       nodeEnv,
@@ -112,6 +118,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
       pricingConfirmed,
       complianceConfirmed,
       appBaseUrl,
+      customerAppUrl,
       corsAllowedOrigins,
       customerCorsAllowedOrigins,
       adminCorsAllowedOrigins,
@@ -138,6 +145,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runti
     pricingConfirmed,
     complianceConfirmed,
     appBaseUrl,
+    customerAppUrl,
     corsAllowedOrigins,
     customerCorsAllowedOrigins,
     adminCorsAllowedOrigins,

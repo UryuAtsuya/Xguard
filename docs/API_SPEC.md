@@ -1,10 +1,10 @@
 # XGuard API 仕様
 
-作成日: 2026-05-24
+更新日: 2026-08-23
 
 ## v0 Backend 範囲
 
-現在の prototype は read-only API spike である。OAuth intake、token repository boundary、mock backup run、usage/cost ledger rollup、proof-page DTO generation をモデル化する。
+現在の v0 backend はread-only OAuth、mock / live backup、usage/cost ledger rollup、proof-page DTO generationを扱う。live経路の実credential / staging smokeと、snapshot全体のtransactional persistenceは別のrelease gateである。
 
 ## Routes 一覧
 
@@ -14,7 +14,8 @@
 | GET | `/api/x/oauth/start` | read-only X OAuth authorization metadata と一回限り `state` / S256 PKCE `code_challenge` を返す | なし | なし |
 | GET | `/api/x/oauth/status` | deployment diagnostic として明示有効化され、専用header tokenが一致した場合のみ、OAuth mode、callback、v0 scopes、secret 設定有無だけを返す | `x-xguard-diagnostic-token` header | なし |
 | GET | `/api/x/oauth/callback` | callback shape、`state`、TTL、replay を検証し、repository interface に token references を保存する | OAuth `state` | なし |
-| POST | `/api/backup/run` | fixture-backed mock backup を実行し、usage/cost metadata を roll up する。作成された proof は初期 `private` として扱う | `Authorization: Bearer <sessionToken>` | なし |
+| GET | `/api/customer/session` | callback後のcustomer sessionからtoken非公開のconnected account DTOを復元する | `Authorization: Bearer <sessionToken>` | なし |
+| POST | `/api/backup/run` | mockまたはlive read-only backupを実行し、usage/cost metadataをroll upする。作成されたproofは初期`private` | `Authorization: Bearer <sessionToken>` | なし |
 | GET | `/api/backup/status/:runId` | mock backup status を owner のみ読む | `Authorization: Bearer <sessionToken>` | なし |
 | PATCH | `/api/recovery/:runId/proof/visibility` | owner のみ proof visibility を `unlisted` / `public` / `revoked` に更新する。初期 `private` からの公開/取消を扱い、revoked 後の再公開は409 | `Authorization: Bearer <sessionToken>` | なし |
 | GET | `/api/recovery/:runId/proof` | owner preview 用に mock backup の redacted proof DTO を `public` / `unlisted` 相当で返す。`private` / revoked は404 | `Authorization: Bearer <sessionToken>` | なし |
@@ -27,18 +28,22 @@
 
 ## OAuth Start / Callback
 
-`GET /api/x/oauth/start` は `state` と S256 PKCE `code_challenge` を発行し、`state`、`code_verifier`、有効期限を backend の `OAuthStateRepository` に保存する。`code_verifier` は response body や frontend へ返さない。response には `authorizationUrl`、`scopes`、`state`、`codeChallenge`、`codeChallengeMethod`、`stateExpiresAt`、`mode`、`callbackUrl`、`writesEnabled` を返す。v0 scopes は `tweet.read`、`users.read`、`offline.access` のみで、`code_challenge_method` は `S256` に固定する。
+`GET /api/x/oauth/start?username=<X username>` は `state` と S256 PKCE `code_challenge` を発行し、`state`、`code_verifier`、入力username、有効期限をbackendの`OAuthStateRepository`に保存する。usernameは1から15文字の英数字または`_`に制限し、configured flowでは必須とする。`code_verifier`はresponse bodyやfrontendへ返さない。responseには`authorizationUrl`、`scopes`、`state`、`codeChallenge`、`codeChallengeMethod`、`stateExpiresAt`、`mode`、`callbackUrl`、`writesEnabled`を返す。v0 scopesは`tweet.read`、`users.read`、`offline.access`のみで、`code_challenge_method`は`S256`に固定する。
 
-`GET /api/x/oauth/callback` は `code` と `state` を必須にする。保存済み `state` が存在しない、別の値、または replay の場合は `403 { "error": "invalid_oauth_state" }` を返す。TTL 超過後の callback は `403 { "error": "expired_oauth_state" }` を返す。正常時は `state` を一回で消費し、保存していた `code_verifier` を token exchange boundary へ渡してから token repository boundary へ進む。現prototypeでは外部X token endpointをまだ呼ばず、非productionのprototype検証でのみrepository refを生成する。`NODE_ENV=production` かつ configured mode の callback では prototype token refs / session を発行せず、`501 { "error": "x_oauth_token_exchange_not_implemented" }` を返す。API response には token material と `code_verifier` を返さない。TTL は `OAUTH_STATE_TTL_SECONDS` で変更でき、既定値は300秒である。PKCE verifier byte length は `OAUTH_PKCE_VERIFIER_BYTES` で変更でき、既定値は64 bytes、許可範囲は32から96 bytesである。
+`GET /api/x/oauth/callback`は`code + state`または`error=access_denied + state`を受ける。保存済みstateが存在しない、別の値、またはreplayの場合は`403 { "error": "invalid_oauth_state" }`、TTL超過は`403 { "error": "expired_oauth_state" }`を返す。stateを一回で消費し、configured modeではX token endpointへ`code`、`code_verifier`、`client_id`、`redirect_uri`をform送信する。返却scopeをread-only 3 scopeと完全一致させ、`GET /2/users/me`のusernameを開始時usernameとcase-insensitiveに照合する。
 
-`OAuthStateRepository` は開発既定では in-memory だが、`OAUTH_STATE_REPOSITORY=supabase` で `oauth_states` の service-role store を使う。Supabase store は `state`、`code_verifier`、`expires_at` を保存し、callback 時に対象行を削除して返すことで一回限り消費と replay 拒否を同じ境界へ寄せる。`code_verifier` は service-role 境界の内側に留め、API response や frontend へ返さない。`NODE_ENV=production` では `OAUTH_STATE_REPOSITORY` の明示設定を必須にする。
+raw access / refresh tokenはAES-256-GCM encrypted file storeへ保存し、token repositoryとAPI responseにはopaque referenceだけを渡す。成功時は43文字のcustomer sessionを発行し、configured modeでは`303 Location: <CUSTOMER_APP_URL>/#xguard_session=...`でcustomer appへ戻す。response bodyは空、`Cache-Control: no-store`と`Referrer-Policy: no-referrer`を付ける。frontendはfragmentを直ちに削除し、`GET /api/customer/session`でconnected accountを取得する。provider error description、authorization code、raw token、client secret、PKCE verifierはredirect / response / logへ出さない。
+
+consent拒否、scope不一致、account不一致、token endpoint / X API / secret store failureは固定error codeだけをcustomer fragmentへ返す。account不一致、scope不一致、X API失敗、secret保存失敗では取得済みaccess / refresh tokenをbest-effortでrevokeする。`offline.access`に必要なrefresh tokenが欠落したresponseも拒否する。TTLは`OAUTH_STATE_TTL_SECONDS`で変更でき、既定値は300秒である。PKCE verifier byte lengthは`OAUTH_PKCE_VERIFIER_BYTES`で変更でき、既定値は64 bytes、許可範囲は32から96 bytesである。
+
+`OAuthStateRepository`は開発既定ではin-memoryだが、`OAUTH_STATE_REPOSITORY=supabase`で`oauth_states`のservice-role storeを使う。Supabase storeは`state`、`code_verifier`、`requested_username`、`expires_at`を保存し、callback時に対象行を削除して返すことで一回限り消費とreplay拒否を同じ境界へ寄せる。`code_verifier`はservice-role境界の内側に留め、API responseやfrontendへ返さない。`NODE_ENV=production`では`OAUTH_STATE_REPOSITORY`の明示設定を必須にする。
 
 ## 置き換え予定の Backend Interfaces
 
-- `TokenRepository`: in-memory token refs を、service-role storage と Vault/encryption handling に支えられた `SupabaseTokenRepository` に置き換える。repository は raw token material を frontend に露出せず、`auth_expired` transitions と token revocation を扱える必要がある。
-- `XApiClient`: fixture data を、v0 では `tweet.read`、`users.read`、`offline.access` に限定した X API calls に置き換える。`follows.read` は follower/following retention、privacy、cost handling が承認された後だけ追加する。
+- `TokenRepository`: configured modeのraw tokenはbackend-only encrypted file storeへ保存済み。in-memory token refをservice-role `SupabaseTokenRepository`へ接続し、refresh rotation、利用者disconnect、`auth_expired` transitionを永続化する。
+- `XApiClient`: configured modeは`GET /2/users/me`と`GET /2/users/:id/tweets`をlive実行する。snapshotのSupabase transaction接続とrate-limit header記録は未完了。`follows.read`はfollower/following retention、privacy、cost handlingが承認された後だけ追加する。
 - `ApiUsageLedgerService`: in-memory repository を、`backup_runs` を作成し、`api_usage_events` を記録し、完了前に cost/rate-limit metadata を roll up する Supabase transaction に置き換える。
-- `MockBackupService`: fixture-backed calls を、snapshots、usage events、rate-limit metadata を書き込む transactional backup runner に置き換える。
+- backup service: configured modeのlive readは接続済み。snapshots、usage events、rate-limit metadataを実DB transactionへ書き込むrunnerへ置き換える。
 
 ## 意図的に除外するもの
 
