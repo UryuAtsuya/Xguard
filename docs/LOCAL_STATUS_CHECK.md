@@ -19,10 +19,10 @@ npm install
 
 ## 1. 軽いローカル起動
 
-Terminal 1:
+API、customer、adminをまとめて起動する。
 
 ```bash
-npm run dev:api
+make
 ```
 
 正常なら以下のように表示される。
@@ -31,19 +31,14 @@ npm run dev:api
 XGuard API prototype listening on http://localhost:4000
 ```
 
-Terminal 2:
-
-```bash
-npm run dev:web
-```
-
 正常なら以下のURLが表示される。
 
 ```text
 http://localhost:5173/
+http://localhost:5174/
 ```
 
-ブラウザでは `http://localhost:5173/` を開く。`dev:web` は `/api` と `/health` を `http://localhost:4000` へ proxy する。
+ブラウザではcustomerの`http://localhost:5173/`またはadminの`http://localhost:5174/`を開く。両frontendは`/api`と`/health`を`http://localhost:4000`へproxyする。
 
 ## 2. API health 確認
 
@@ -124,7 +119,7 @@ npm run check
 
 ## 6. 終了
 
-`npm run dev:api` と `npm run dev:web` を起動した terminal で `Ctrl-C` を押して停止する。
+`make`を起動したterminalで`Ctrl-C`を押すと、API、customer、adminをまとめて停止する。個別起動が必要な場合は`make backend`、`make customer`、`make admin`、frontendだけの場合は`make frontend`を使う。
 
 ## トラブルシュート
 

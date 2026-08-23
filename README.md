@@ -63,15 +63,13 @@ CIはNode.js 22を使用します。初回は依存関係を固定してinstall�
 npm ci
 ```
 
-3つのterminalで起動します。
+1つのterminalでまとめて起動します。
 
 ```bash
-npm run dev:api            # http://localhost:4000
-npm run dev:web:customer   # http://localhost:5173
-npm run dev:web:admin      # http://localhost:5174
+make
 ```
 
-`npm run dev:web`はcustomer起動のaliasです。customer/adminとも`/api`と`/health`をlocal backendへproxyします。
+`make`はbackend（`http://localhost:4000`）、customer（`http://localhost:5173`）、admin（`http://localhost:5174`）をまとめて起動し、`Ctrl-C`ですべて停止する。個別起動は`make backend`、`make customer`、`make admin`、frontend 2つだけの起動は`make frontend`を使う。従来の`npm run dev:*`も利用でき、`npm run dev:web`はcustomer起動のaliasである。customer/adminとも`/api`と`/health`をlocal backendへproxyする。
 
 customerのmock smokeは環境変数未設定でも実行できます。adminをブラウザ確認する場合は、少なくとも次のfrontend値と、対応するbackend/Supabase設定が必要です。
 
