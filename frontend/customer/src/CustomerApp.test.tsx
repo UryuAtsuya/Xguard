@@ -81,15 +81,17 @@ describe("CustomerApp", () => {
   it("keeps the existing customer backup flow", async () => {
     render(<CustomerApp />);
 
-    expect(screen.getByRole("heading", { name: "積み上げた発信を、もしもの後にも。" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "積み上げた発信を、あなたの手元に。" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "保全をはじめる" })).toHaveAttribute("href", "#start");
+    expect(screen.queryByText("Private account archive")).not.toBeInTheDocument();
     expect(screen.getByText("パスワードをXGuardに入力することはありません。", { exact: false })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Xアカウントを確認" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Xで本人確認する" })).toBeEnabled());
     fireEvent.change(screen.getByRole("textbox", { name: "保全するXアカウント" }), {
       target: { value: "xguard_creator" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Xアカウントを確認" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "保全を開始" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "保全を開始" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xで本人確認する" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "プロフィールと投稿を保全する" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "プロフィールと投稿を保全する" }));
 
     await waitFor(() => {
       expect(mockedRunBackup).toHaveBeenCalledWith(25, "customer-session");
