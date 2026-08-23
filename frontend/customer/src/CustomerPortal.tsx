@@ -8,7 +8,14 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { BackupRun, ProofPublicPayload, XAccount } from "../../../shared/types";
-import { completeOAuthCallback, fetchHealth, runBackup, startOAuth, type HealthResponse } from "./api";
+import {
+  completeOAuthCallback,
+  fetchCustomerSession,
+  fetchHealth,
+  runBackup,
+  startOAuth,
+  type HealthResponse,
+} from "./api";
 import type { CustomerFlowPhase } from "./types";
 
 const usernamePattern = /^[A-Za-z0-9_]{1,15}$/;
@@ -27,6 +34,39 @@ export function CustomerPortal() {
     fetchHealth()
       .then((response) => setHealth(response))
       .catch(() => setNotice("現在サービスに接続できません。時間をおいて再度お試しください。"));
+  }, []);
+
+  useEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const resumedSessionToken = fragment.get("xguard_session");
+    const oauthError = fragment.get("xguard_oauth_error");
+
+    if (!resumedSessionToken && !oauthError) {
+      return;
+    }
+
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+
+    if (oauthError) {
+      setNotice(oauthErrorNotice(oauthError));
+      return;
+    }
+
+    if (!resumedSessionToken || !/^[A-Za-z0-9_-]{32,128}$/.test(resumedSessionToken)) {
+      setNotice("Xの本人確認結果を確認できませんでした。もう一度お試しください。");
+      return;
+    }
+
+    setIsBusy(true);
+    fetchCustomerSession(resumedSessionToken)
+      .then((response) => {
+        setUsername(response.connectedAccount.username);
+        setConnectedAccount(response.connectedAccount);
+        setSessionToken(resumedSessionToken);
+        setNotice(`@${response.connectedAccount.username} を確認できました。次に保全を開始してください。`);
+      })
+      .catch(() => setNotice("Xの本人確認結果を確認できませんでした。もう一度お試しください。"))
+      .finally(() => setIsBusy(false));
   }, []);
 
   const phase = useMemo<CustomerFlowPhase>(() => {
@@ -48,7 +88,7 @@ export function CustomerPortal() {
     setNotice(`@${requestedUsername} の本人確認を準備しています`);
 
     try {
-      const response = await startOAuth();
+      const response = await startOAuth(requestedUsername);
 
       if (response.mode === "configured") {
         window.location.assign(response.authorizationUrl);
@@ -307,6 +347,19 @@ function ProofSummary({ proof, backupRun }: { proof: ProofPublicPayload; backupR
 
 function normalizeUsername(value: string) {
   return value.trim().replace(/^@/, "");
+}
+
+function oauthErrorNotice(code: string): string {
+  switch (code) {
+    case "consent_denied":
+      return "Xでの本人確認がキャンセルされました。接続する場合はもう一度お試しください。";
+    case "account_mismatch":
+      return "入力したユーザー名と、Xで確認したアカウントが一致しません。";
+    case "scope_mismatch":
+      return "読み取り専用の権限を確認できませんでした。もう一度お試しください。";
+    default:
+      return "Xの本人確認を完了できませんでした。時間をおいて再度お試しください。";
+  }
 }
 
 function formatDateTime(value: string) {

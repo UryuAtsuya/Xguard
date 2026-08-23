@@ -1,6 +1,7 @@
 export interface OAuthStateRecord {
   state: string;
   codeVerifier: string;
+  requestedUsername?: string;
   expiresAt: Date;
 }
 

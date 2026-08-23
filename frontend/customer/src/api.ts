@@ -24,6 +24,11 @@ export interface OAuthCallbackResponse {
   writesEnabled: boolean;
 }
 
+export interface CustomerSessionResponse {
+  connectedAccount: XAccount;
+  writesEnabled: boolean;
+}
+
 export interface BackupRunResponse {
   backupRun: BackupRun;
   proofPayload: ProofPublicPayload;
@@ -35,13 +40,20 @@ export function fetchHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>("/health");
 }
 
-export function startOAuth(): Promise<OAuthStartResponse> {
-  return requestJson<OAuthStartResponse>("/api/x/oauth/start");
+export function startOAuth(username: string): Promise<OAuthStartResponse> {
+  const params = new URLSearchParams({ username });
+  return requestJson<OAuthStartResponse>(`/api/x/oauth/start?${params.toString()}`);
 }
 
 export function completeOAuthCallback(code: string, state: string): Promise<OAuthCallbackResponse> {
   const params = new URLSearchParams({ code, state });
   return requestJson<OAuthCallbackResponse>(`/api/x/oauth/callback?${params.toString()}`);
+}
+
+export function fetchCustomerSession(sessionToken: string): Promise<CustomerSessionResponse> {
+  return requestJson<CustomerSessionResponse>("/api/customer/session", {
+    headers: { authorization: `Bearer ${sessionToken}` },
+  });
 }
 
 export function runBackup(tweetLimit: number, sessionToken: string): Promise<BackupRunResponse> {

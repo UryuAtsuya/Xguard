@@ -1,6 +1,6 @@
 # XGuard Architecture
 
-更新日: 2026-08-11
+更新日: 2026-08-23
 
 ## サービス境界
 
@@ -14,7 +14,7 @@ XGuardは、Xアカウントのprofileと直近投稿をread-onlyで保全し、
 | Admin frontend | `frontend/admin/`の独立Vite app | `/login`、`/auth/callback`、`/`、`/team`だけを許可する |
 | Backend API | `backend/src/app.ts`のExpress app | customer/admin APIを別CORS allowlistと別認証境界で提供する |
 | Database/Auth | `supabase/schema.sql`、Supabase Auth、service-role HTTP repository | 一部repositoryはruntime接続済み。実staging DBでの統合検証は未完了 |
-| X API | OAuth / API client interfaceとmock実装 | live token exchangeとlive X API readは未実装 |
+| X API | mock / live OAuth・API client | configured modeでtoken exchange、本人照合、profile / recent posts readを実行可能。実staging smokeは未完了 |
 
 production想定ではcustomerを`app.<base-domain>`、adminを`admin.<base-domain>`へ別originで配信し、backend APIとSupabaseをfrontendから分離する。配置、route、bundleの詳細は`docs/AUDIENCE_SEPARATION.md`、環境変数とrollout順は`docs/DEPLOY.md`を正本とする。
 
@@ -41,15 +41,16 @@ customerとadminはentrypoint、CSS、API client、build output、testを共有�
 
 ## Customer Request Flow
 
-1. Customer frontendが`GET /api/x/oauth/start`を呼ぶ。
-2. BackendはPKCE `code_verifier`とstateを生成し、`OAuthStateRepository`へ有効期限付きで保存する。development既定はmemory、`OAUTH_STATE_REPOSITORY=supabase`ではservice-role経由で`oauth_states`を使う。
+1. Customer frontendが保全対象のusernameを付けて`GET /api/x/oauth/start`を呼ぶ。
+2. BackendはPKCE `code_verifier`、username、stateを`OAuthStateRepository`へ有効期限付きで保存する。development既定はmemory、`OAUTH_STATE_REPOSITORY=supabase`ではservice-role経由で`oauth_states`を使う。
 3. `GET /api/x/oauth/callback`はstateを一度だけconsumeし、expired / invalid stateを拒否する。
-4. mock modeではprototype token referenceとcustomer sessionをin-memory repositoryへ保存する。configured production callbackはlive exchange未実装のため、tokenやsessionを発行せず`501`で停止する。
-5. `POST /api/backup/run`は現在`MockXApiClient`からfixtureの本人account、profile、recent postsを読み、in-memory usage ledgerへ計測結果を記録する。
-6. Backendはraw payloadではなくredacted public proof DTOを組み立てる。proof pageはmemory、または`CONTENT_COMPLIANCE_EVENT_REPOSITORY=supabase`時にSupabaseへ保存する。
-7. Customer sessionを持つ本人だけがbackup status、proof visibility、公開可能なproof DTOへアクセスできる。revoke時はcompliance eventも記録する。
+4. mock modeではprototype token referenceを使う。configured modeではAuthorization Code + PKCEでX token endpointへ交換し、`GET /2/users/me`で入力usernameと本人accountを照合する。
+5. raw access / refresh tokenはAES-256-GCMでbackend-only volumeへ保存し、app repositoryにはopaque referenceだけを渡す。callbackはcustomer sessionをURL fragmentでcustomer appへ戻し、frontendは復帰直後にfragmentを削除して`GET /api/customer/session`でaccountを復元する。
+6. `POST /api/backup/run`はmock modeではfixture、configured modeでは`GET /2/users/me`と`GET /2/users/:id/tweets`からprofile / recent postsを読み、in-memory usage ledgerへ計測結果を記録する。
+7. Backendはraw payloadではなくredacted public proof DTOを組み立てる。proof pageはmemory、または`CONTENT_COMPLIANCE_EVENT_REPOSITORY=supabase`時にSupabaseへ保存する。
+8. Customer sessionを持つ本人だけがbackup status、proof visibility、公開可能なproof DTOへアクセスできる。revoke時はcompliance eventも記録する。
 
-現時点のmock flow成功は、live X OAuth、live X API、tokenの永続保存、backup全体のtransactional persistenceが完成したことを意味しない。
+unit / component testの成功は、実X credentialでのconsent、persistent volume、実Supabase、backup全体のtransactional persistenceが動作した証明ではない。
 
 ## Admin Request Flow
 
@@ -66,12 +67,12 @@ customerとadminはentrypoint、CSS、API client、build output、testを共有�
 
 | Concern | Schema / contract | Runtime接続 | 未完了境界 |
 |---|---|---|---|
-| OAuth state | `oauth_states`、single-use consume | memory / Supabaseを選択可能 | 実staging DB検証 |
+| OAuth state | `oauth_states`、username + PKCE、single-use consume | memory / Supabaseを選択可能 | 実staging DB検証 |
 | Admin member / Auth | `admin_members`、membership events、Supabase Auth | Supabase JWKS / REST / inviteへ接続可能 | staging redirect、owner bootstrap、role smoke |
 | Proof page / compliance | `proof_pages`、`content_compliance_events`、visibility + event RPC | memory / Supabaseを選択可能 | 実DB transaction検証 |
 | API usage ledger | `backup_runs`、`api_usage_events`、monthly cost guard RPCとrepository | backup runtimeはin-memory | 実DB接続とbackup flowへの組み込み |
-| X token reference | `x_oauth_connections`と`SupabaseTokenRepository` contract | app runtimeはin-memory | live token exchange、backend-only secret store、refresh/revoke |
-| Account / snapshot | `x_accounts`、profile/tweet/media snapshot schema | backup runtimeはfixture | live X API adapterとtransactional persistence |
+| X token reference | `x_oauth_connections`と`SupabaseTokenRepository` contract | raw tokenはAES-256-GCM encrypted file、refはin-memory | persistent volume smoke、refresh rotation、connection refの実DB永続化 |
+| Account / snapshot | `x_accounts`、profile/tweet/media snapshot schema | configured modeはlive X read、mock modeはfixture | snapshot / usageのtransactional persistence |
 | Customer session | repository contract | app runtimeはin-memory | staging向け永続session設計 |
 | Recovery data | `recovery_sessions`、`recovery_cases`、owner consistency constraint | API flow未接続 | staging integrationと運用flow |
 
@@ -81,10 +82,11 @@ customerとadminはentrypoint、CSS、API client、build output、testを共有�
 
 | Audience | Endpoint | Auth / purpose |
 |---|---|---|
-| customer | `GET /api/x/oauth/start` | PKCE/stateを開始する |
-| customer | `GET /api/x/oauth/callback` | stateをconsumeし、mock接続または安全な`501`を返す |
+| customer | `GET /api/x/oauth/start?username=...` | usernameをPKCE/stateへ結び付けて開始する |
+| customer | `GET /api/x/oauth/callback` | stateをconsumeし、mock接続またはlive exchange後にcustomerへ戻す |
+| customer | `GET /api/customer/session` | callback fragmentのcustomer sessionで本人accountを復元する |
 | diagnostic | `GET /api/x/oauth/status` | 明示的に有効化した短期diagnostic tokenでのみ利用する |
-| customer | `POST /api/backup/run` | customer session必須。現在はmock backup |
+| customer | `POST /api/backup/run` | customer session必須。mock / configured modeに応じたread-only backup |
 | customer | `GET /api/backup/status/:runId` | ownerだけがrunを参照する |
 | customer | `PATCH /api/recovery/:runId/proof/visibility` | ownerだけが公開範囲を変更する |
 | customer | `GET /api/recovery/:runId/proof` | private / revokedを公開せず、redacted DTOだけを返す |
@@ -111,9 +113,8 @@ baseline commit `afa8f10a927e641764326758eac5d6c3a05ca1e4`では、Node.js 22 cl
 次の項目は未完了である。
 
 - `supabase/schema.sql`の実staging適用、RLS、service-role、transaction integration test
-- X OAuth 2.0 Authorization Code + PKCEのlive token exchange
-- backend-only secret storeへのraw token保存とrefresh / revoke
-- `users.read` / `tweet.read`を使うlive X API adapterと本人username照合
+- 実X credentialによるconsent、callback、本人照合、live backupのstaging evidence
+- encrypted token volumeの永続性、refresh rotation、利用者disconnect時のrevoke endpoint
 - customer/admin/backendのstaging deploy、別origin、CORS、redirect、role E2E
 - credential非露出、runtime log、search `noindex`、custom domain / DNSの実環境確認
 
