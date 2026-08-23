@@ -70,6 +70,15 @@ describe("runtime confirmation gates", () => {
     expect(config.adminCorsAllowedOrigins).toEqual(["https://admin.example.com"]);
   });
 
+  it("uses an explicit app version or the Railway commit SHA for release evidence", () => {
+    expect(createRuntimeConfig({ APP_VERSION: "release-2026.08.23" }).appVersion).toBe(
+      "release-2026.08.23",
+    );
+    expect(createRuntimeConfig({ RAILWAY_GIT_COMMIT_SHA: "4b411c60071e4f7696a315b0dc68490a123d075a" }).appVersion).toBe(
+      "4b411c60071e4f7696a315b0dc68490a123d075a",
+    );
+  });
+
   it("rejects production when pricing confirmation is missing or false", () => {
     for (const pricingConfirmed of [undefined, "false"]) {
       expect(() =>

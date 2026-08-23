@@ -214,6 +214,7 @@ export function createApp(config: RuntimeConfig = createRuntimeConfig(), options
       ok: true,
       service: "xguard-api",
       mode: "prototype",
+      version: config.appVersion ?? "unknown",
       xOAuthMode: config.xOAuth.mode,
       timestamp: new Date().toISOString(),
     });

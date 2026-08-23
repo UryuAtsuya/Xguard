@@ -12,7 +12,7 @@ XGuardは、Xアカウントのprofileと直近投稿をread-onlyで保全し、
 |---|---|---|
 | Customer frontend | `frontend/customer/`の独立Vite app | `/`だけを許可し、customer APIだけを呼ぶ |
 | Admin frontend | `frontend/admin/`の独立Vite app | `/login`、`/auth/callback`、`/`、`/team`だけを許可する |
-| Backend API | `backend/src/app.ts`のExpress app | customer/admin APIを別CORS allowlistと別認証境界で提供する |
+| Backend API | `backend/src/app.ts`のExpress app、Node.js 22 multi-stage image | non-root containerでcustomer/admin APIを別CORS allowlistと別認証境界で提供する |
 | Database/Auth | `supabase/schema.sql`、Supabase Auth、service-role HTTP repository | 一部repositoryはruntime接続済み。実staging DBでの統合検証は未完了 |
 | X API | mock / live OAuth・API client | configured modeでtoken exchange、本人照合、profile / recent posts readを実行可能。実staging smokeは未完了 |
 

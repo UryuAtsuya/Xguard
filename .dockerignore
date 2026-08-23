@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+.DS_Store
+node_modules
+dist
+.playwright-cli
+output/playwright
+frontend
+sites
+docs
+*.log
