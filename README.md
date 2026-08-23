@@ -89,6 +89,7 @@ backend/productionの環境変数とrollout順は`docs/DEPLOY.md`、mock API smo
 |---|---|---|
 | customer test | `npm run test:web:customer` | customer component、保全フロー、404 |
 | admin test | `npm run test:web:admin` | magic link、callback、dashboard、team、404 |
+| production依存audit | `npm run audit:production` | production依存の既知脆弱性がないこと |
 | customer build | `npm run build:web:customer` | `dist/frontend-customer/` |
 | admin build | `npm run build:web:admin` | `dist/frontend-admin/` |
 | bundle境界 | `npm run build:web && npm run check:bundle-separation` | customer bundleへのadmin情報混入と、その逆を検出 |
