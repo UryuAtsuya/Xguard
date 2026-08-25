@@ -1,10 +1,12 @@
 import {
   Archive,
+  ArrowDown,
   Check,
   DatabaseBackup,
   FileCheck2,
   KeyRound,
   LockKeyhole,
+  ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { BackupRun, ProofPublicPayload, XAccount } from "../../../shared/types";
@@ -138,27 +140,30 @@ export function CustomerPortal() {
     <section className="customer-portal" aria-label="お客様が見る画面">
       <section className="customer-stage">
         <div className="customer-story">
-          <div className="night-reflection" aria-hidden="true" />
-          <p className="hero-kicker">夜の活動を、静かに守る。</p>
-          <h1>
-            積み上げた発信を、<span>あなたの手元に。</span>
-          </h1>
-          <p className="hero-text">
-            プロフィールと直近の投稿を、誰にも見せず静かに保全します。
-            必要なときだけ、自分の活動を確かめられる記録にします。
-          </p>
-          <a className="hero-start-link" href="#start">
-            保全をはじめる <span aria-hidden="true">↓</span>
-          </a>
-          <ul className="hero-assurances" aria-label="XGuardの接続方針">
-            <li><strong>読むだけ</strong><span>投稿・DM・フォロー操作はしません</span></li>
-            <li><strong>最初は非公開</strong><span>見せる範囲はあとから選べます</span></li>
-            <li><strong>必要な記録だけ</strong><span>プロフィールと直近25件を保全します</span></li>
-          </ul>
-          <div className="story-note">
-            <span aria-hidden="true">01</span>
-            <p><strong>公開するタイミングも、範囲も、自分で選ぶ。</strong><span>保全したデータは、公開操作をするまで外部から見えません。</span></p>
+          <div className="hero-copy">
+            <p className="hero-kicker">Xの発信を、非公開で保全</p>
+            <h1>
+              積み上げた発信を、<span>あなたの手元に。</span>
+            </h1>
+            <p className="hero-text">
+              プロフィールと直近25件を3ステップで保全。投稿・DM・フォロー操作はせず、
+              公開する範囲は自分で選べます。
+            </p>
+            <div className="hero-actions">
+              <a className="hero-primary-action" href="#start">
+                保全をはじめる <ArrowDown aria-hidden="true" size={17} />
+              </a>
+              <a className="hero-secondary-action" href="#saved-records">保存される内容を見る</a>
+            </div>
           </div>
+
+          <PreservationSample />
+
+          <ul className="trust-strip" aria-label="XGuardの安全な接続方針">
+            <li><strong>読み取り専用</strong><span>投稿やDMはしません</span></li>
+            <li><strong>パスワード不要</strong><span>X公式画面で本人確認</span></li>
+            <li><strong>初期非公開</strong><span>公開範囲は自分で選択</span></li>
+          </ul>
         </div>
 
         <aside className="journey-card" id="start" aria-label="保全の手続き">
@@ -235,48 +240,59 @@ export function CustomerPortal() {
         </aside>
       </section>
 
-      <section className="archive-section" id="how-it-works" aria-labelledby="archive-title">
+      <section className="saved-records-section" id="saved-records" aria-labelledby="saved-records-title">
         <div className="section-intro">
-          <p className="section-label">残す記録</p>
-          <h2 id="archive-title">あなたらしさが分かる、3つの記録。</h2>
-          <p>必要以上に集めません。自分の活動を説明するときに役立つものだけを残します。</p>
+          <p className="section-label">保存される内容</p>
+          <h2 id="saved-records-title">あとで見返せる、活動の控え。</h2>
+          <p>必要以上に集めず、自分の活動を説明するときに役立つ記録だけを残します。</p>
         </div>
-        <div className="archive-grid">
-          <article><span>01</span><div><h3>アカウントの顔</h3><p>表示名、ユーザー名、自己紹介。本人らしさを確かめるためのプロフィール。</p></div></article>
-          <article><span>02</span><div><h3>最近の発信</h3><p>活動の流れが分かる直近25件。読むための権限だけで保存します。</p></div></article>
-          <article><span>03</span><div><h3>必要な時の証明</h3><p>初期状態は非公開。必要になった時だけ見せられる確認ページです。</p></div></article>
+        <div className="records-ledger">
+          <article><span>01</span><div><h3>プロフィール</h3><p>表示名、ユーザー名、自己紹介など、アカウントの本人らしさが分かる情報。</p></div></article>
+          <article><span>02</span><div><h3>直近の投稿</h3><p>活動の流れを振り返れる直近25件。投稿する権限を使わずに保存します。</p></div></article>
+          <article><span>03</span><div><h3>非公開の保全記録</h3><p>保全日時と保存件数を確認できる控え。公開操作をするまでは外部から見えません。</p></div></article>
         </div>
       </section>
 
-      <section className="safety-section" id="safety" aria-labelledby="safety-title">
+      <section
+        className="permission-section"
+        id="permissions"
+        aria-label="XGuardの接続権限"
+      >
         <div className="section-intro">
-          <p className="section-label">XGuardの約束</p>
-          <h2 id="safety-title">守るために、しないことを決めています。</h2>
-          <p>アカウントを動かすサービスではありません。記録を残すための、読み取り専用の保全サービスです。</p>
+          <p className="section-label">接続前の確認</p>
+          <h2 id="permission-title">必要な記録だけ。アカウントは動かさない。</h2>
+          <p>XGuardは記録を残すための読み取り専用サービスです。接続前に、取得するものと取得しないものを確認できます。</p>
         </div>
-        <div className="safety-grid">
-          <article>
-            <span aria-hidden="true">01</span>
-            <h3>アカウントを動かさない</h3>
-            <p>XGuardが投稿、DM、フォロー操作を行うことはありません。</p>
+        <div className="permission-card">
+          <article className="permission-row permission-row-allow">
+            <span className="permission-icon"><Check aria-hidden="true" size={18} /></span>
+            <div><small>取得する</small><h3>プロフィール・直近の投稿</h3><p>表示名、ユーザー名、自己紹介と、直近25件の投稿を保全します。</p></div>
           </article>
-          <article>
-            <span aria-hidden="true">02</span>
-            <h3>必要以上に集めない</h3>
-            <p>プロフィールと直近25件の投稿を、復旧に備えた控えとして保存します。</p>
+          <article className="permission-row permission-row-deny">
+            <span className="permission-icon" aria-hidden="true">×</span>
+            <div><small>取得しない</small><h3>投稿・DM・フォロー操作</h3><p>アカウントを動かす権限は求めず、XGuardから操作することもありません。</p></div>
           </article>
-          <article>
-            <span aria-hidden="true">03</span>
-            <h3>勝手に公開しない</h3>
-            <p>保全した内容は、公開操作を行うまで外部向けに表示されません。</p>
-          </article>
+          <p className="permission-note"><ShieldCheck aria-hidden="true" size={17} /> 読み取り専用の権限だけを使います。</p>
+        </div>
+      </section>
+
+      <section className="use-case-section" aria-labelledby="use-case-title">
+        <div className="section-intro">
+          <p className="section-label">こんな時に</p>
+          <h2 id="use-case-title">活動を続けるための、静かな準備。</h2>
+          <p>大切な発信をXの中だけに置かず、自分で確認できる記録として備えます。</p>
+        </div>
+        <div className="use-case-list">
+          <article><span>01</span><h3>過去の発信を手元に残したい</h3></article>
+          <article><span>02</span><h3>本人であることを説明する記録を準備したい</h3></article>
+          <article><span>03</span><h3>見せる範囲を自分で管理したい</h3></article>
         </div>
       </section>
 
       <section className="faq-section" id="faq" aria-labelledby="faq-title">
         <div>
-          <p className="section-label">接続前の確認</p>
-          <h2 id="faq-title">接続前に知っておきたいこと</h2>
+          <p className="section-label">よくある質問</p>
+          <h2 id="faq-title">不安を残さず、接続するために。</h2>
         </div>
         <div className="faq-list">
           <details>
@@ -297,6 +313,34 @@ export function CustomerPortal() {
           </details>
         </div>
       </section>
+
+      <a className="mobile-start-cta" href="#start" aria-label="保全をはじめる（入力へ移動）">
+        <KeyRound aria-hidden="true" size={18} /> 保全をはじめる
+      </a>
+    </section>
+  );
+}
+
+function PreservationSample() {
+  return (
+    <section className="preservation-sample" aria-label="保全サンプル">
+      <div className="sample-topline">
+        <span className="sample-label">保全サンプル</span>
+        <span className="sample-private"><LockKeyhole aria-hidden="true" size={13} /> 非公開で保管</span>
+      </div>
+      <div className="sample-account">
+        <span className="sample-avatar" aria-hidden="true">X</span>
+        <div><strong>@your_account</strong><span>あなたの活動記録</span></div>
+      </div>
+      <div className="sample-post" aria-hidden="true">
+        <span /><span /><span />
+      </div>
+      <dl className="sample-stats">
+        <div><dt>プロフィール</dt><dd>1件</dd></div>
+        <div><dt>直近の投稿</dt><dd>最大25件</dd></div>
+        <div><dt>公開状態</dt><dd>非公開</dd></div>
+      </dl>
+      <p><ShieldCheck aria-hidden="true" size={15} /> 保存した内容は自分で確認できます</p>
     </section>
   );
 }

@@ -95,8 +95,19 @@ describe("CustomerApp", () => {
   it("keeps the existing customer backup flow", async () => {
     render(<CustomerApp />);
 
+    expect(screen.getByText("Xの発信を、非公開で保全")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "積み上げた発信を、あなたの手元に。" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "保全をはじめる" })).toHaveAttribute("href", "#start");
+    expect(screen.getByRole("link", { name: "保存される内容を見る" })).toHaveAttribute("href", "#saved-records");
+    expect(screen.getByText("読み取り専用")).toBeInTheDocument();
+    expect(screen.getByText("パスワード不要")).toBeInTheDocument();
+    expect(screen.getByText("初期非公開")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "保全サンプル" })).toHaveTextContent("最大25件");
+    expect(screen.getByRole("region", { name: "保全サンプル" })).toHaveTextContent("非公開で保管");
+    expect(screen.getByRole("region", { name: "XGuardの接続権限" })).toHaveTextContent("取得する");
+    expect(screen.getByRole("region", { name: "XGuardの接続権限" })).toHaveTextContent("プロフィール・直近の投稿");
+    expect(screen.getByRole("region", { name: "XGuardの接続権限" })).toHaveTextContent("取得しない");
+    expect(screen.getByRole("region", { name: "XGuardの接続権限" })).toHaveTextContent("投稿・DM・フォロー操作");
     expect(screen.queryByText("Private account archive")).not.toBeInTheDocument();
     expect(screen.getByText("パスワードをXGuardに入力することはありません。", { exact: false })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Xで本人確認する" })).toBeEnabled());

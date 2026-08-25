@@ -26,13 +26,13 @@ export function CustomerApp() {
           </span>
         </a>
         <nav aria-label="ページ内メニュー">
-          <a href="#how-it-works">残すもの</a>
-          <a href="#safety">守り方</a>
+          <a href="#saved-records">保存内容</a>
+          <a href="#permissions">接続前の確認</a>
           <a href="#faq">よくある質問</a>
         </nav>
         <span className="header-privacy">
           <ShieldCheck aria-hidden="true" size={15} />
-          公開は自分で選べます
+          読み取り専用・初期非公開
         </span>
       </header>
       <CustomerPortal />
